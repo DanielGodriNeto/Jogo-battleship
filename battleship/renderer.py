@@ -40,54 +40,47 @@ class Renderer:
         from constants import MAP_SIZES
         g = self.g
         surf = self.screen
-        surf.fill(C['ui_bg'])
+        surf.fill((30, 40, 60))  # cor de fundo mais escura e simples
 
-        t = g.font_lg.render("⚓  BATALHA NAVAL 2", True, C['p1'])
-        surf.blit(t, (g.SCREEN_W // 2 - t.get_width() // 2, 60))
-        t2 = g.font_sm.render("v0.3  — protótipo", True, C['text_dim'])
-        surf.blit(t2, (g.SCREEN_W // 2 - t2.get_width() // 2, 92))
+        # Título simples
+        title = g.font_lg.render("BATALHA NAVAL", True, (255, 255, 255))
+        surf.blit(title, (g.SCREEN_W // 2 - title.get_width() // 2, 60))
 
-        y = 150
+        y = 130
         g._menu_buttons = []
 
-        ms = g.font_md.render("Tamanho do mapa:", True, C['text'])
+        # Escolha de tamanho do mapa
+        ms = g.font_md.render("Tamanho do mapa:", True, (220, 220, 220))
         surf.blit(ms, (g.SCREEN_W // 2 - ms.get_width() // 2, y))
-        y += 32
+        y += 30
 
-        bw, bh = 110, 34
+        bw, bh = 90, 30
         total_w = len(MAP_SIZES) * (bw + 10) - 10
         bx_start = g.SCREEN_W // 2 - total_w // 2
         for i, key in enumerate(MAP_SIZES):
-            bx   = bx_start + i * (bw + 10)
+            bx = bx_start + i * (bw + 10)
             rect = pygame.Rect(bx, y, bw, bh)
-            sel  = key == g.map_choice
-            col  = C['p1'] if sel else C['btn']
-            pygame.draw.rect(surf, col, rect, border_radius=6)
-            pygame.draw.rect(surf, C['ui_border'], rect, 1, border_radius=6)
-            lc   = C['ui_bg'] if sel else C['text']
-            lbl  = g.font_sm.render(key, True, lc)
+            sel = key == g.map_choice
+            col = (80, 120, 180) if sel else (60, 80, 120)
+            pygame.draw.rect(surf, col, rect)
+            pygame.draw.rect(surf, (200, 200, 200), rect, 1)
+            lbl = g.font_sm.render(key, True, (255, 255, 255) if sel else (200, 200, 200))
             surf.blit(lbl, (bx + bw // 2 - lbl.get_width() // 2, y + 4))
-            sz   = g.font_xs.render(f"{MAP_SIZES[key]}×{MAP_SIZES[key]}", True, lc)
-            surf.blit(sz, (bx + bw // 2 - sz.get_width() // 2, y + 18))
             g._menu_buttons.append((rect, key))
-        y += bh + 24
+        y += bh + 20
 
-        sw, sh = 200, 48
+        # Botão iniciar
+        sw, sh = 160, 38
         sx = g.SCREEN_W // 2 - sw // 2
         rect_start = pygame.Rect(sx, y, sw, sh)
-        pygame.draw.rect(surf, C['p1'], rect_start, border_radius=8)
-        pygame.draw.rect(surf, (100, 255, 160), rect_start, 2, border_radius=8)
-        ts = g.font_md.render("▶  INICIAR", True, C['ui_bg'])
-        surf.blit(ts, (sx + sw // 2 - ts.get_width() // 2,
-                       y + sh // 2 - ts.get_height() // 2))
+        pygame.draw.rect(surf, (60, 180, 80), rect_start)
+        pygame.draw.rect(surf, (200, 200, 200), rect_start, 1)
+        ts = g.font_md.render("INICIAR", True, (255, 255, 255))
+        surf.blit(ts, (sx + sw // 2 - ts.get_width() // 2, y + sh // 2 - ts.get_height() // 2))
         g._menu_buttons.append((rect_start, 'start'))
-        y += sh + 40
+        y += sh + 30
 
-        for ln in ["← → Leme   ↑ ↓ Velocidade   ENTER Confirmar",
-                   "Scroll/Z/X Zoom   SPACE Pular ataque   R Menu"]:
-            tl = g.font_xs.render(ln, True, C['text_dim'])
-            surf.blit(tl, (g.SCREEN_W // 2 - tl.get_width() // 2, y))
-            y += 16
+        # Não exibe instruções de teclas no menu
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Mundo

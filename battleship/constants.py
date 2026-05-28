@@ -12,7 +12,7 @@ BOTTOM_H    = 90
 MAP_SIZES   = {'Pequeno': 48, 'Médio': 80, 'Grande': 128, 'Enorme': 200}
 DEFAULT_MAP = 'Médio'
 
-FOG_RADIUS_BASE = 1
+FOG_RADIUS_BASE = 5
 FPS = 60
 
 # Mutável via _init_game
