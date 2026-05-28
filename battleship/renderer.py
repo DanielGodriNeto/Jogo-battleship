@@ -280,16 +280,21 @@ class Renderer:
         if not self._in_vp(mx, my):
             return
         tx, ty = self.g.s2w(mx, my)
-        rx, ry = int(tx - ship.gx), int(ty - ship.gy)
+        # Snap para grid inteiro igual ao que o click usa
+        rx, ry = int(math.floor(tx - ship.gx)), int(math.floor(ty - ship.gy))
 
         valid = self.g._is_valid_placement(ship, pending_mod, rx, ry)
         color = (50, 255, 50, 120) if valid else (255, 50, 50, 120)
 
+        t = self.tile
+        s = pygame.Surface((t, t), pygame.SRCALPHA)
+        s.fill(color)
         for dx in range(pending_mod.current_w):
             for dy in range(pending_mod.current_h):
-                sx, sy = self.w2s(ship.gx + rx + dx, ship.gy + ry + dy)
-                s = pygame.Surface((self.tile, self.tile), pygame.SRCALPHA)
-                s.fill(color)
+                # Usa coordenadas inteiras para ficar perfeitamente no grid
+                wx = int(ship.gx) + rx + dx
+                wy = int(ship.gy) + ry + dy
+                sx, sy = self.w2s(wx, wy)
                 self.screen.blit(s, (sx, sy))
 
     def draw_particles(self, particles):

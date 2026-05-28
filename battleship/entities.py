@@ -372,6 +372,20 @@ class Fish(NPC):
     def money_reward(self):
         return 25
 
+    def world_tiles(self):
+        # Peixe sempre anda com offset +0.5 (centrado no tile).
+        # round(gx - 0.5) dá o tile correto mesmo perto da borda entre tiles.
+        return [(round(self.gx - 0.5), round(self.gy - 0.5))]
+
+    def take_damage_at(self, wx, wy, amount=1):
+        tx, ty = round(self.gx - 0.5), round(self.gy - 0.5)
+        if tx == wx and ty == wy:
+            self.hp -= amount
+            if self.hp <= 0:
+                self.alive = False
+            return True
+        return False
+
 
 class NPCShip(NPC):
     def __init__(self, gx, gy):
