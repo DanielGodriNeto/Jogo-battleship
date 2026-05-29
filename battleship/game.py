@@ -284,7 +284,7 @@ class Game:
 
         for npc in self.npcs:
             if npc.alive and npc.take_damage_at(tx, ty):
-                reward = int(npc.money_reward() * (1.2 if shooter.has_research() else 1.0))
+                reward = int(npc.money_reward() * (1.5 if shooter.has_research() else 1.0))
                 shooter.money += reward
                 self._log(f"NPC abatido! +${reward}")
                 self._explode_at_tile(tx, ty)
