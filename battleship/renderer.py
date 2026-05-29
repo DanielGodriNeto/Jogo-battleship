@@ -85,22 +85,45 @@ class Renderer:
     # ═══════════════════════════════════════════════════════════════════════════
     # Mundo
     # ═══════════════════════════════════════════════════════════════════════════
+    def draw_world(self, visible: set):
+        """Renderiza tiles do viewport (água e ilhas) + NPCs visíveis."""
+        g  = self.g
+        t  = self.tile
+        gs = g.grid_size
+        self.screen.fill(C['ui_bg'])
+
+        col0 = max(0, int(self.cam_x) - 1)
+        row0 = max(0, int(self.cam_y) - 1)
+        col1 = min(gs, col0 + int(self._vp_w() / t) + 3)
+        row1 = min(gs, row0 + int(self._vp_h() / t) + 3)
+
+        _island_variants = {
+            'sand' : [(230, 205, 130), (240, 215, 148), (220, 198, 118)],
+            'grass': [( 48, 130,  65), ( 60, 148,  78), ( 42, 118,  58)],
+            'stone': [(100, 106, 115), (118, 124, 135), ( 88,  94, 105)],
+        }
+
+        for gy in range(row0, row1):
+            for gx in range(col0, col1):
+                sx, sy = self.w2s(gx, gy)
+                terrain = g.map_grid[gy][gx]
+                if terrain == 'water':
+                    col = C['water_a'] if (gx + gy) % 2 == 0 else C['water_b']
+                    pygame.draw.rect(self.screen, col, (sx, sy, t, t))
+                    pygame.draw.rect(self.screen, C['grid_line'], (sx, sy, t, t), 1)
+                else:
+                    variants = _island_variants[terrain]
+                    col = variants[(gx * 3 + gy * 7) % len(variants)]
+                    pygame.draw.rect(self.screen, col, (sx, sy, t, t))
+                    border_col = (200, 185, 110) if terrain == 'sand' else \
+                                 ( 35, 100,  50) if terrain == 'grass' else \
+                                 ( 70,  75,  85)
+                    pygame.draw.rect(self.screen, border_col, (sx, sy, t, t), 1)
+
+        self.draw_npcs(visible)
+
     def draw_water(self):
-        """Desenha água e grade. Respeita tile atual (com zoom)."""
-        t = self.tile
-        vis_cols = int(self._vp_w() / t) + 2
-        vis_rows = int(self._vp_h() / t) + 2
-        for row in range(vis_rows):
-            for col in range(vis_cols):
-                wx = int(self.cam_x) + col
-                wy = int(self.cam_y) + row
-                sx, sy = self.w2s(wx, wy)
-                col_c = C['water_a'] if (wx + wy) % 2 == 0 else C['water_b']
-                pygame.draw.rect(self.screen, col_c, (sx, sy, t + 1, t + 1))
-                pygame.draw.rect(self.screen, C['grid_line'], (sx, sy, t, t), 1)
-                if wx % 10 == 0 and wy % 10 == 0:
-                    lbl = self.g.font_xs.render(f"{wx},{wy}", True, C['grid_line'])
-                    self.screen.blit(lbl, (sx + 2, sy + 2))
+        pass  # legado — use draw_world
 
     def draw_fog(self, visible):
         t  = self.tile
@@ -122,9 +145,10 @@ class Renderer:
             wx, wy = int(npc.gx), int(npc.gy)
             if (wx, wy) not in visible:
                 continue
-            sx, sy = self.w2s(npc.gx, npc.gy)
+            sx, sy = self.w2s(wx, wy)
             if not self._in_vp(sx, sy):
                 continue
+            # Desenho do NPC
             if isinstance(npc, Fish):
                 rad = math.radians(npc.angle)
                 cx, cy = sx + t / 2, sy + t / 2
@@ -134,10 +158,39 @@ class Renderer:
                     (cx + math.cos(rad - 2.4) * t * 0.2, cy + math.sin(rad - 2.4) * t * 0.2),
                 ]
                 pygame.draw.polygon(self.screen, C['fish_col'], pts)
+                # Barra de vida do peixe
+                if hasattr(npc, 'hp') and hasattr(npc, 'max_hp'):
+                    ratio = npc.hp / npc.max_hp
+                    bar_w = t - 6
+                    bar_h = 4
+                    bx, by = sx + 3, sy - 7
+                    pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bar_w, bar_h))
+                    hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
+                    pygame.draw.rect(self.screen, hpc, (bx, by, int(bar_w * ratio), bar_h))
+                # Vetor de movimento
+                vx, vy = getattr(npc, 'vx', 0), getattr(npc, 'vy', 0)
+                if vx or vy:
+                    endx = sx + t // 2 + int(vx * t)
+                    endy = sy + t // 2 + int(vy * t)
+                    pygame.draw.line(self.screen, (80, 200, 255), (sx + t // 2, sy + t // 2), (endx, endy), 2)
             elif isinstance(npc, NPCShip):
                 col = lerp_color(C['damaged'], C['npc_ship'], npc.hp / npc.max_hp)
                 pygame.draw.rect(self.screen, col, (sx + 3, sy + 3, t - 6, t - 6))
                 pygame.draw.rect(self.screen, C['npc_ship'], (sx + 3, sy + 3, t - 6, t - 6), 1)
+                # Barra de vida do navio NPC
+                ratio = npc.hp / npc.max_hp
+                bar_w = t - 6
+                bar_h = 4
+                bx, by = sx + 3, sy - 7
+                pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bar_w, bar_h))
+                hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
+                pygame.draw.rect(self.screen, hpc, (bx, by, int(bar_w * ratio), bar_h))
+                # Vetor de movimento
+                vx, vy = getattr(npc, 'vx', 0), getattr(npc, 'vy', 0)
+                if vx or vy:
+                    endx = sx + t // 2 + int(vx * t)
+                    endy = sy + t // 2 + int(vy * t)
+                    pygame.draw.line(self.screen, (80, 200, 255), (sx + t // 2, sy + t // 2), (endx, endy), 2)
 
     def draw_ship(self, ship: Ship, visible: set):
         t  = self.tile
@@ -197,32 +250,39 @@ class Renderer:
                         pygame.draw.circle(self.screen, dc,
                                            (sx + pad + 2 + i * (dot_r * 2 + 1), sy + pad + 2), dot_r)
 
-        # Seta de heading
-        if ship.hull and not ship.hull.destroyed:
-            cx, cy = ship.center()
-            scx, scy = self.w2s(cx, cy)
-            if self._in_vp(scx, scy):
-                rad = math.radians(ship.angle)
-                ex  = scx + int(math.cos(rad) * t * 1.8)
-                ey  = scy + int(math.sin(rad) * t * 1.8)
-                pygame.draw.line(self.screen, ship.player_color, (scx, scy), (ex, ey), 2)
-                pygame.draw.polygon(self.screen, ship.player_color, [
-                    (ex, ey),
-                    (ex + int(math.cos(rad + 2.5) * 5), ey + int(math.sin(rad + 2.5) * 5)),
-                    (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
-                ])
-
-        # Barra de HP
+        # Seta de heading, barra de HP e vetor de movimento só se o centro do casco estiver visível
         h = ship.hull
         if h and not h.destroyed:
-            ox_, oy_ = int(ship.gx), int(ship.gy)
-            bx, by = self.w2s(ox_, oy_)
-            by += t * h.h + 2
-            bw  = t * h.w - 4
-            ratio = h.hp / h.max_hp
-            pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bw, 4))
-            hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
-            pygame.draw.rect(self.screen, hpc, (bx, by, int(bw * ratio), 4))
+            cx, cy = ship.center()
+            cx_tile, cy_tile = int(cx), int(cy)
+            if (cx_tile, cy_tile) in visible:
+                scx, scy = self.w2s(cx, cy)
+                if self._in_vp(scx, scy):
+                    # Seta de heading
+                    rad = math.radians(ship.angle)
+                    ex  = scx + int(math.cos(rad) * t * 1.8)
+                    ey  = scy + int(math.sin(rad) * t * 1.8)
+                    pygame.draw.line(self.screen, ship.player_color, (scx, scy), (ex, ey), 2)
+                    pygame.draw.polygon(self.screen, ship.player_color, [
+                        (ex, ey),
+                        (ex + int(math.cos(rad + 2.5) * 5), ey + int(math.sin(rad + 2.5) * 5)),
+                        (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
+                    ])
+                    # Barra de HP
+                    ox_, oy_ = int(ship.gx), int(ship.gy)
+                    bx, by = self.w2s(ox_, oy_)
+                    by += t * h.h + 2
+                    bw  = t * h.w - 4
+                    ratio = h.hp / h.max_hp
+                    pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bw, 4))
+                    hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
+                    pygame.draw.rect(self.screen, hpc, (bx, by, int(bw * ratio), 4))
+                    # Vetor de movimento
+                    vx, vy = getattr(ship, 'vx', 0), getattr(ship, 'vy', 0)
+                    if vx or vy:
+                        endx = scx + int(vx * t)
+                        endy = scy + int(vy * t)
+                        pygame.draw.line(self.screen, (80, 200, 255), (scx, scy), (endx, endy), 2)
 
     def draw_ghost(self, ghost, ship: Ship):
         if not ghost:

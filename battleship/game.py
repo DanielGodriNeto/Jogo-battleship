@@ -27,7 +27,6 @@ class Game:
         self.font_md = pygame.font.SysFont('consolas', 15, bold=True)
         self.font_lg = pygame.font.SysFont('consolas', 20, bold=True)
 
-        # Zoom: só o mundo escala — HUD fica fixo
         self.tile = BASE_TILE
         self.zoom = 1.0
 
@@ -36,7 +35,6 @@ class Game:
 
         self.renderer = Renderer(self)
 
-        # Atributos inicializados antes de _init_game
         self.ships     : list[Ship]     = []
         self.npcs      : list           = []
         self.particles : list[Particle] = []
@@ -46,6 +44,7 @@ class Game:
         self.turn      = 0
         self.turn_absolute = 0
         self.grid_size = MAP_SIZES[DEFAULT_MAP]
+        self.map_grid  = [['water'] * self.grid_size for _ in range(self.grid_size)]
         self.radar     = Radar()
         self._menu_buttons = []
         self._shop_rects   = []
@@ -56,23 +55,85 @@ class Game:
         self.steering = 0.0
         self.speed    = 2
 
+    # ─────────────────────── Geração de ilhas ─────────────────────────────────
+    def generate_islands(self):
+        gs = self.grid_size
+        self.map_grid = [['water'] * gs for _ in range(gs)]
+
+        # Margem mínima segura para spawn de ilha dado o radius máximo
+        margin = 6
+
+        # Zona protegida: posições iniciais dos navios + folga generosa
+        protected = set()
+        for px, py in [(4, 4), (gs - 8, gs - 8)]:
+            for dx in range(-6, 12):
+                for dy in range(-6, 12):
+                    protected.add((px + dx, py + dy))
+
+        # Escala numero/tamanho de ilhas pelo mapa — mapa pequeno = ilhas menores
+        max_radius = max(3, min(7, gs // 10))
+        num_islands = max(2, gs // 12)
+
+        placed   = 0
+        attempts = 0
+        max_attempts = num_islands * 20
+
+        while placed < num_islands and attempts < max_attempts:
+            attempts += 1
+            radius = random.randint(2, max_radius)
+            cx = random.randint(margin + radius, gs - margin - radius - 1)
+            cy = random.randint(margin + radius, gs - margin - radius - 1)
+
+            # Checa colisão com zonas protegidas
+            if any((cx + dx, cy + dy) in protected
+                   for dx in range(-radius - 2, radius + 3)
+                   for dy in range(-radius - 2, radius + 3)):
+                continue
+
+            # Pinta a ilha: areia → grama → pedra
+            for dx in range(-radius - 1, radius + 2):
+                for dy in range(-radius - 1, radius + 2):
+                    gx = cx + dx
+                    gy = cy + dy
+                    if not (0 < gx < gs - 1 and 0 < gy < gs - 1):
+                        continue
+                    dist = math.hypot(dx, dy) + random.uniform(-0.8, 0.8)
+                    if dist < radius * 0.28:
+                        self.map_grid[gy][gx] = 'stone'
+                    elif dist < radius * 0.62:
+                        self.map_grid[gy][gx] = 'grass'
+                    elif dist < radius:
+                        self.map_grid[gy][gx] = 'sand'
+            placed += 1
+
     # ─────────────────────── Init partida ─────────────────────────────────────
     def _init_game(self, map_key=DEFAULT_MAP):
         self.grid_size = MAP_SIZES[map_key]
         self.tile, self.zoom = BASE_TILE, 1.0
+
+        self.generate_islands()
 
         self.ships = [
             self._build_ship(4, 4, 0, 0),
             self._build_ship(self.grid_size - 8, self.grid_size - 8, 180, 1),
         ]
 
+        # Spawna NPCs apenas em tiles de água longe das bordas
+        water_tiles = [
+            (x, y) for y in range(2, self.grid_size - 2)
+            for x in range(2, self.grid_size - 2)
+            if self.map_grid[y][x] == 'water'
+        ]
+        random.shuffle(water_tiles)
         self.npcs = []
-        for _ in range(12):
-            self.npcs.append(Fish(random.randint(2, self.grid_size - 2),
-                                  random.randint(2, self.grid_size - 2)))
-        for _ in range(4):
-            self.npcs.append(NPCShip(random.uniform(10, self.grid_size - 10),
-                                     random.uniform(10, self.grid_size - 10)))
+        fish_count = min(12, len(water_tiles))
+        npc_count  = min(4,  len(water_tiles) - fish_count)
+        for i in range(fish_count):
+            wx, wy = water_tiles[i]
+            self.npcs.append(Fish(wx, wy))
+        for i in range(npc_count):
+            wx, wy = water_tiles[fish_count + i]
+            self.npcs.append(NPCShip(float(wx), float(wy)))
 
         self.turn           = 0
         self.turn_absolute  = 0
@@ -99,7 +160,6 @@ class Game:
 
     # ─────────────────────── Zoom ─────────────────────────────────────────────
     def _set_zoom(self, factor):
-        """Aplica zoom apenas ao mundo. HUD e minimapa ficam fixos."""
         self.zoom = max(0.4, min(2.5, factor))
         self.tile = max(6, int(BASE_TILE * self.zoom))
         self._center_cam()
@@ -109,22 +169,22 @@ class Game:
     def _vp_h(self): return VP_PIXELS_H
 
     def _center_cam(self):
+        if not self.ships:
+            return
         cx, cy = self.ships[self.turn].center()
         vis_cols = self._vp_w() / self.tile
         vis_rows = self._vp_h() / self.tile
         self.cam_x = max(0.0, min(self.grid_size - vis_cols, cx - vis_cols / 2))
         self.cam_y = max(0.0, min(self.grid_size - vis_rows, cy - vis_rows / 2))
 
-    # ─────────────────────── Conversão coord ──────────────────────────────────
+    # ─────────────────────── Coordenadas ──────────────────────────────────────
     def w2s(self, gx, gy):
-        """Mundo → tela (só a área do viewport)."""
         return (
             int((gx - self.cam_x) * self.tile),
             int((gy - self.cam_y) * self.tile),
         )
 
     def s2w(self, sx, sy):
-        """Tela → mundo (float)."""
         return (
             sx / self.tile + self.cam_x,
             sy / self.tile + self.cam_y,
@@ -139,14 +199,18 @@ class Game:
         if len(self.messages) > 7:
             self.messages.pop(0)
 
-    # ─────────────────────── Neblina ──────────────────────────────────────────
+    # ─────────────────────── Visibilidade ─────────────────────────────────────
     def _visible_tiles(self) -> set:
+        if not self.ships:
+            return set()
         cx, cy = self.ships[self.turn].center()
-        r      = self.ships[self.turn].fog_radius()
-        r2     = r * r
+        r  = self.ships[self.turn].fog_radius()
+        r2 = r * r
         icx, icy = int(cx), int(cy)
-        return {(icx + dx, icy + dy) for dx in range(-r - 1, r + 2)
-                for dy in range(-r - 1, r + 2) if dx * dx + dy * dy <= r2}
+        return {(icx + dx, icy + dy)
+                for dx in range(-r - 1, r + 2)
+                for dy in range(-r - 1, r + 2)
+                if dx * dx + dy * dy <= r2}
 
     # ─────────────────────── Explosão ─────────────────────────────────────────
     def _explode_at_tile(self, wx, wy):
@@ -154,12 +218,35 @@ class Game:
         for _ in range(28):
             self.particles.append(Particle(sx, sy))
 
+    # ─────────────────────── Colisão com ilhas ────────────────────────────────
+    def _check_island_collision(self, ship: Ship):
+        hit_tiles = set()
+        for (wx, wy) in ship.world_tiles():
+            if 0 <= wx < self.grid_size and 0 <= wy < self.grid_size:
+                if self.map_grid[wy][wx] != 'water':
+                    hit_tiles.add((wx, wy))
+            else:
+                hit_tiles.add((wx, wy))
+
+        if not hit_tiles:
+            return
+
+        self._log("⚠ Encalhou numa ilha!")
+        for wx, wy in hit_tiles:
+            ship.take_damage_at(wx, wy)
+            self._explode_at_tile(wx, wy)
+        self._check_win()
+
     # ─────────────────────── Mecânica ─────────────────────────────────────────
     def _execute_move(self):
         ship = self.ships[self.turn]
         ship.apply_move(self.steering, self.speed)
         self._center_cam()
         self._log(f"J{self.turn+1} navegou! Rumo {ship.angle:.0f}°, vel {self.speed}")
+
+        self._check_island_collision(ship)
+        if self.winner:
+            return
 
         self._check_collision()
         if self.winner:
@@ -195,52 +282,46 @@ class Game:
             self._log("Fora do alcance!")
             return
 
-        dmg     = shooter.mortar_damage()
-        hit_npc = False
-
-        for npc in list(self.npcs):
-            if npc.alive and npc.take_damage_at(tx, ty, dmg):
-                reward = int(npc.money_reward() * 1.2) if shooter.has_research() else npc.money_reward()
+        for npc in self.npcs:
+            if npc.alive and npc.take_damage_at(tx, ty):
+                reward = int(npc.money_reward() * (1.5 if shooter.has_research() else 1.0))
                 shooter.money += reward
-                self._log(f"NPC destruído! +${reward}")
-                hit_npc = True
-                break
+                self._log(f"NPC abatido! +${reward}")
+                self._explode_at_tile(tx, ty)
+                self._open_shop()
+                return
 
-        if not hit_npc:
-            hit = target.take_damage_at(tx, ty, dmg)
+        dmg = shooter.mortar_damage()
+        if target.take_damage_at(tx, ty, dmg):
+            self._log(f"Acerto! -{dmg}HP")
             self._explode_at_tile(tx, ty)
-            self._log(f"J{self.turn+1} → ({tx},{ty}) — {'ACERTO!' if hit else 'água.'}")
-            if hit and not target.alive:
-                reward = int(500 * 1.2) if shooter.has_research() else 500
-                shooter.money += reward
-                self._log(f"+${reward} (barco destruído!)")
-
-        self._explode_at_tile(tx, ty)
-        self._check_win()
-        if not self.winner:
+            self._check_win()
+            if not self.winner:
+                self._open_shop()
+        else:
+            self._log("Errou!")
             self._open_shop()
+
+    def _check_win(self):
+        for i, s in enumerate(self.ships):
+            if not s.alive:
+                self.winner = 1 - i
+                self.phase  = 'end'
+                self._log(f"╔ JOGADOR {self.winner+1} VENCEU! ╗")
 
     def _open_shop(self):
         self.phase = 'shop'
-        self._log(f"J{self.turn+1} — Loja (ENTER=pular)")
-
-    def _check_win(self):
-        for i, ship in enumerate(self.ships):
-            if not ship.alive:
-                self.winner = 1 - i
-                self.phase  = 'end'
-                self._log(f"══ JOGADOR {self.winner+1} VENCEU! ══")
-                self._log("Pressione R para reiniciar.")
+        self._log(f"J{self.turn+1} — Loja. ENTER=pular")
 
     def _end_turn(self):
-        self.turn          = 1 - self.turn
+        self.turn = 1 - self.turn
         self.turn_absolute += 1
-        self.phase         = 'move'
-        self.steering      = 0.0
-        self.speed         = 2
+        self.phase = 'move'
+        self.steering = 0.0
+        self.speed    = 2
         self._refresh_ghost()
         self._center_cam()
-        self._log(f"Vez do Jogador {self.turn+1} — Mover barco")
+        self._log(f"╔ Vez do Jogador {self.turn+1} — Mover barco ╗")
 
     def _refresh_ghost(self):
         if self.ships:
@@ -248,26 +329,20 @@ class Game:
 
     # ─────────────────────── Construção ───────────────────────────────────────
     def _is_valid_placement(self, ship: Ship, mod: Module, rx, ry) -> bool:
-        """Verifica se o módulo pode ser colocado em (rx, ry) relativo ao barco."""
         mod.rx, mod.ry = rx, ry
-        new_tiles = set(mod.local_tiles())
+        new_tiles  = set(mod.local_tiles())
         h = ship.hull
         if not h:
             return False
-
-        # Deve estar dentro do casco
         hull_tiles = set(h.local_tiles())
         if not new_tiles.issubset(hull_tiles):
             return False
-
-        # Não pode sobrepor módulos existentes
         existing = set()
         for m in ship.modules:
             if not m.destroyed and m.type != 'hull':
                 existing.update(m.local_tiles())
         if new_tiles & existing:
             return False
-
         return True
 
     # ─────────────────────── NPCs ─────────────────────────────────────────────
@@ -275,7 +350,10 @@ class Game:
         if self.phase == 'action':
             return
         for npc in self.npcs:
-            npc.update()
+            if isinstance(npc, NPCShip):
+                npc.update(self.map_grid)
+            else:
+                npc.update()
         self.npcs = [n for n in self.npcs if n.alive]
 
     # ─────────────────────── Eventos ──────────────────────────────────────────
@@ -284,7 +362,6 @@ class Game:
             if e.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
 
-            # ── MENU ─────────────────────────────────────────────────────────
             if self.state == 'menu':
                 if e.type == pygame.MOUSEBUTTONDOWN:
                     for (rect, action) in self._menu_buttons:
@@ -295,12 +372,10 @@ class Game:
                                 self.map_choice = action
                 return
 
-            # ── SCROLL DO MOUSE (zoom) ────────────────────────────────────────
             if e.type == pygame.MOUSEWHEEL:
                 self._set_zoom(self.zoom + e.y * 0.12)
                 continue
 
-            # ── TECLADO ───────────────────────────────────────────────────────
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_r and self.phase == 'end':
                     self.state = 'menu'; return
@@ -343,11 +418,10 @@ class Game:
                 elif self.phase == 'build':
                     if e.key == pygame.K_r and self.pending_mod:
                         self.pending_mod.rotated = not self.pending_mod.rotated
-                    elif e.key in (pygame.K_ESCAPE,):
+                    elif e.key == pygame.K_ESCAPE:
                         self.phase = 'shop'
                         self._log("Construção cancelada.")
 
-            # ── MOUSE ─────────────────────────────────────────────────────────
             if e.type == pygame.MOUSEBUTTONDOWN and not self.winner:
                 mx, my = e.pos
 
@@ -385,14 +459,15 @@ class Game:
                     if e.button == 1:
                         tx, ty = self.s2w(mx, my)
                         ship   = self.ships[self.turn]
-                        rx, ry = int(tx - ship.gx), int(ty - ship.gy)
+                        rx = int(math.floor(tx - ship.gx))
+                        ry = int(math.floor(ty - ship.gy))
                         if self._is_valid_placement(ship, self.pending_mod, rx, ry):
                             ship.apply_purchase('buy', self.pending_mod.type, self.pending_mod)
                             self.pending_mod = None
                             self.phase = 'shop'
                             self._log("Módulo construído!")
                         else:
-                            self._log("Posição inválida! (dentro do casco, sem sobreposição)")
+                            self._log("Posição inválida!")
                     elif e.button == 3:
                         self.phase = 'shop'
                         self._log("Construção cancelada.")
@@ -404,14 +479,13 @@ class Game:
             return
 
         r = self.renderer
-
-        # Área do mundo (recebe zoom)
         visible = self._visible_tiles()
-        r.draw_water()
-        r.draw_npcs(visible)
-        r.draw_ship(self.ships[1 - self.turn], visible)
+
+        r.draw_world(visible)
+
         if self.phase == 'move':
             r.draw_ghost(self._ghost, self.ships[self.turn])
+        r.draw_ship(self.ships[1 - self.turn], visible)
         r.draw_ship(self.ships[self.turn], visible)
         if self.phase == 'action':
             r.draw_mortar_range(self.ships[self.turn])
@@ -420,11 +494,10 @@ class Game:
             r.draw_build_overlay(self.ships[self.turn], self.pending_mod)
         r.draw_fog(visible)
 
-        # Partículas (posição em pixels — não escala com zoom aqui)
         self.particles = [p for p in self.particles if p.life > 0]
+        # O renderer já faz o update e o draw juntos!
         r.draw_particles(self.particles)
 
-        # HUD fixa (nunca sofre zoom)
         r.draw_sidebar()
         r.draw_bottom()
 
@@ -433,7 +506,7 @@ class Game:
         while True:
             if self.state == 'play':
                 self._update_npcs()
-                self.radar.update(self.ships, self.npcs, self.turn)
+                self.radar.update(self.ships, self.npcs, self.turn, self.map_grid, self.grid_size)
 
             self.handle_events()
             self.draw()

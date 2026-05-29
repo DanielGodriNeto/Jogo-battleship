@@ -23,6 +23,11 @@ C = {
     'water_a'   : ( 22,  82, 140),
     'water_b'   : ( 18,  70, 122),
     'grid_line' : ( 15,  58, 100),
+    # --- Cores das Ilhas ---
+    'sand'      : (235, 210, 140),  # Praia / Bordas
+    'grass'     : ( 55, 140,  75),  # Interior verde
+    'stone'     : (110, 115, 125),  # Centro rochoso / Pico
+    # -----------------------
     'ui_bg'     : ( 10,  14,  22),
     'ui_panel'  : ( 20,  26,  40),
     'ui_border' : ( 44,  56,  84),
@@ -68,7 +73,7 @@ MODULE_DEFS = {
     'mortar'    : {'name':'Morteiro',        'w':1,'h':1,'hp':2,  'color':'mortar',   'cost':120, 'rx':2,'ry':0, 'desc':'Canhão 1×1, alcance 14'},
     'armor'     : {'name':'Armadura',        'w':1,'h':1,'hp':5,  'color':'armor',    'cost':80,  'rx':1,'ry':0, 'desc':'Absorve dano de colisão'},
     'engine'    : {'name':'Motor Diesel',    'w':2,'h':1,'hp':3,  'color':'engine',   'cost':0,   'rx':0,'ry':1, 'desc':'Vel max 4, incluso'},
-    'research'  : {'name':'Laboratório',     'w':2,'h':1,'hp':2,  'color':'research', 'cost':150, 'rx':0,'ry':0, 'desc':'+20% recompensa'},
+    'research'  : {'name':'Laboratório',     'w':2,'h':1,'hp':2,  'color':'research', 'cost':150, 'rx':0,'ry':0, 'desc':'+50% recompensa'},
     'radar'     : {'name':'Radar',           'w':1,'h':1,'hp':2,  'color':'research', 'cost':200, 'rx':2,'ry':1, 'desc':'+4 tiles de visão'},
     # Upgrades de motor
     'engine_nuclear'  : {'name':'Motor Nuclear',       'w':2,'h':1,'hp':4,'color':'engine','cost':300,'rx':0,'ry':1,'desc':'Vel max 6'},

@@ -180,6 +180,8 @@ class Ship:
         from constants import GRID_SIZE as GS
         path = []
         x, y = self.gx, self.gy
+        # Limita o ângulo máximo de giro para 45 graus
+        steering = max(-45, min(45, steering))
         for step in range(speed):
             t = step / max(speed - 1, 1) if speed > 1 else 1.0
             rad = math.radians(self.angle + steering * t)
@@ -270,10 +272,13 @@ class Ship:
             self.money -= cost
             h = self.hull
             if h:
+                old_max_hp = h.max_hp
                 h.w = nw
                 h.h = nh
                 h.max_hp = nw * nh  # HP escala com tamanho
-                h.hp = min(h.hp + 2, h.max_hp)
+                # HP aumenta proporcionalmente ao novo tamanho
+                h.hp = h.hp + (h.max_hp - old_max_hp)
+                h.hp = min(h.hp, h.max_hp)
             self.hull_level += 1
 
 
@@ -370,7 +375,7 @@ class Fish(NPC):
                 self._pick_target()
 
     def money_reward(self):
-        return 25
+        return 50
 
     def world_tiles(self):
         # Peixe sempre anda com offset +0.5 (centrado no tile).
@@ -390,18 +395,35 @@ class Fish(NPC):
 class NPCShip(NPC):
     def __init__(self, gx, gy):
         super().__init__(gx, gy)
-        self.hp     = 4
-        self.max_hp = 4
+        self.hp     = 1
+        self.max_hp = 1
         self.speed  = random.uniform(0.03, 0.10)
         self.timer  = 0
 
-    def update(self):
+    def update(self, map_grid):
         if not self.alive:
             return
-        from constants import GRID_SIZE as GS
+
+        GS = len(map_grid)  # usa o tamanho real do mapa, não a constante global
+
         self.timer += 1
+
         if self.timer % 90 == 0:
             self.angle += random.uniform(-45, 45)
+
+        # Look-ahead: escaneia tiles à frente e desvia de terra/bordas
+        rad = math.radians(self.angle)
+        for d in range(1, 5):
+            future_x = int(self.gx + math.cos(rad) * d)
+            future_y = int(self.gy + math.sin(rad) * d)
+            if 0 <= future_x < GS and 0 <= future_y < GS:
+                if map_grid[future_y][future_x] != 'water':
+                    self.angle += random.choice([25, -25, 40, -40])
+                    break
+            else:
+                self.angle += random.choice([30, -30])
+                break
+
         rad = math.radians(self.angle)
         self.gx = max(1.0, min(GS - 2.0, self.gx + math.cos(rad) * self.speed))
         self.gy = max(1.0, min(GS - 2.0, self.gy + math.sin(rad) * self.speed))
