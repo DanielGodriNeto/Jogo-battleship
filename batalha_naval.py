@@ -130,4 +130,57 @@ while tamanhoBarco > 0:
             columBarco += 1
 
     tamanhoBarco -= 1
-    os.system('cls' if os.name == 'nt' else 'clear')
+    os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal
+
+while tamanhoBarco > 0:
+
+    rowBarco = randint(1, 10)
+    columBarco = randint(1,10)
+
+    orientacao = ['V','H']
+    x = randint(0,1)
+    
+    if tamanhoBarco > 1:
+        orientacaoBarco = orientacao[x]
+    else:
+        orientacaoBarco = "H"
+
+    # Se passar das bordas da matriz, para
+    if orientacaoBarco == 'V' and (rowBarco + tamanhoBarco - 1) > 10:
+        continue
+    elif orientacaoBarco == 'H' and (columBarco + tamanhoBarco - 1) > 10:
+        continue
+    
+    
+    # Criamos variáveis temporárias para não estragar as originais durante o teste
+    checaRow = rowBarco
+    checaCol = columBarco
+    podePosicionar = True
+
+    for j in range(tamanhoBarco):
+        if tabuleiroComputador[checaRow][checaCol] == '■':
+            podePosicionar = False
+            break # Se achou um único impedimento, já podemos parar de checar
+            
+        # Avança a simulação passo a passo
+        if orientacaoBarco == 'V':
+            checaRow += 1
+        else:
+            checaCol += 1
+
+    # Se a simulação encontrou um barco no caminho, cancela o posicionamento
+    if not podePosicionar:
+        continue # Volta para o início do while, pedindo o mesmo barco de novo
+    
+    # Se passou em tudo (Limites E Sobreposição), desenha o barco
+    for j in range(tamanhoBarco):
+        tabuleiroComputador[rowBarco] [columBarco] = '■'
+        if orientacaoBarco == 'V':
+            rowBarco += 1
+        else:
+            columBarco += 1
+
+    tamanhoBarco -= 1
+
+for k in range(11):
+    print (tabuleiroComputador[k])
