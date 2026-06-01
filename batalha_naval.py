@@ -69,27 +69,42 @@ while tamanhoBarco > 0:
     for c in range (11):
         print (tabuleiroJogador[c])
 
-    letraRow = input(f"Digite a linha de onde quer colocar o barco de tamanho {tamanhoBarco}: ")
+    letraRow = input(f"Digite a linha de onde quer colocar o barco de tamanho {tamanhoBarco}: ").upper()
     if letraRow in letrasLinhas:
         rowBarco = letrasLinhas.index(letraRow) + 1
+    else:
+        print("Erro: Linha inválida! Escolha uma letra de A a J.")
+        continue
 
-    columBarco = int(input(f"Digite a coluna de onde quer colocar o barco de tamanho {tamanhoBarco}: "))
-    orientacaoBarco = input(f"Digite a orientação do barco V ou H: ").upper()
+    try:
+        columBarco = int(input(f"Digite a coluna de onde quer colocar o barco de tamanho {tamanhoBarco}: "))
+        if columBarco < 1 or columBarco > 10:
+            print("Erro: Coluna deve ser entre 1 e 10.")
+            continue
+    except ValueError:
+        print("Erro: Digite apenas números para a coluna!")
+        continue
+    if tamanhoBarco > 1:
+        orientacaoBarco = input(f"Digite a orientação do barco V ou H: ").upper()
+        if orientacaoBarco not in ['V','H']:
+            print ('Erro: Orientação inválida! Use V ou H.')
+    else:
+        orientacaoBarco = "H"
 
-    podePosicionar = True
-    
+    # Se passar das bordas da matriz, para
     if orientacaoBarco == 'V' and (rowBarco + tamanhoBarco - 1) > 10:
         print("Erro: O barco ultrapassa o limite inferior do tabuleiro!")
-        sleep(2)
         continue
     elif orientacaoBarco == 'H' and (columBarco + tamanhoBarco - 1) > 10:
         print("Erro: O barco ultrapassa o limite lateral direito!")
-        sleep(2)
         continue
+    
+    
     # Criamos variáveis temporárias para não estragar as originais durante o teste
     checaRow = rowBarco
     checaCol = columBarco
-    
+    podePosicionar = True
+
     for j in range(tamanhoBarco):
         if tabuleiroJogador[checaRow][checaCol] == '■':
             podePosicionar = False
@@ -104,16 +119,15 @@ while tamanhoBarco > 0:
     # Se a simulação encontrou um barco no caminho, cancela o posicionamento
     if not podePosicionar:
         print("Erro: Já existe um barco bloqueando esse caminho! Escolha outra posição.")
-        sleep(2)
         continue # Volta para o início do while, pedindo o mesmo barco de novo
     
     # Se passou em tudo (Limites E Sobreposição), desenha o barco
-    
     for j in range(tamanhoBarco):
         tabuleiroJogador[rowBarco] [columBarco] = '■'
         if orientacaoBarco == 'V':
             rowBarco += 1
         else:
             columBarco += 1
+
     tamanhoBarco -= 1
     os.system('cls' if os.name == 'nt' else 'clear')
