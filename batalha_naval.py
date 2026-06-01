@@ -2,30 +2,33 @@ import os
 from random import randint
 from time import sleep
 
+#Tabuleiros para cada uso
 tabuleiroFeedbackJogador = [
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0]
+    ['@',1,2,3,4,5,6,7,8,9,10],
+    ['A',0,0,0,0,0,0,0,0,0,0],
+    ['B',0,0,0,0,0,0,0,0,0,0],
+    ['C',0,0,0,0,0,0,0,0,0,0],
+    ['D',0,0,0,0,0,0,0,0,0,0],
+    ['E',0,0,0,0,0,0,0,0,0,0],
+    ['F',0,0,0,0,0,0,0,0,0,0],
+    ['G',0,0,0,0,0,0,0,0,0,0],
+    ['H',0,0,0,0,0,0,0,0,0,0],
+    ['I',0,0,0,0,0,0,0,0,0,0],
+    ['J',0,0,0,0,0,0,0,0,0,0]
 ]
 
 tabuleiroFeedbackComputador = [
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0]
+    ['@',1,2,3,4,5,6,7,8,9,10],
+    ['A',0,0,0,0,0,0,0,0,0,0],
+    ['B',0,0,0,0,0,0,0,0,0,0],
+    ['C',0,0,0,0,0,0,0,0,0,0],
+    ['D',0,0,0,0,0,0,0,0,0,0],
+    ['E',0,0,0,0,0,0,0,0,0,0],
+    ['F',0,0,0,0,0,0,0,0,0,0],
+    ['G',0,0,0,0,0,0,0,0,0,0],
+    ['H',0,0,0,0,0,0,0,0,0,0],
+    ['I',0,0,0,0,0,0,0,0,0,0],
+    ['J',0,0,0,0,0,0,0,0,0,0]
 ]
 
 tabuleiroJogador = [
@@ -56,10 +59,13 @@ tabuleiroComputador = [
     ['J',0,0,0,0,0,0,0,0,0,0]
 ]
 
+#  Começa pelo maior barco
 tamanhoBarco = 5
+# Letras numa lista para conmseguir o número da coordenada
 letrasLinhas = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
 
-for i in range (5):
+
+while tamanhoBarco > 0:
     for c in range (11):
         print (tabuleiroJogador[c])
 
@@ -68,13 +74,46 @@ for i in range (5):
         rowBarco = letrasLinhas.index(letraRow) + 1
 
     columBarco = int(input(f"Digite a coluna de onde quer colocar o barco de tamanho {tamanhoBarco}: "))
-    orientacaoBarco = input(f"Digite a orientação do barco V ou H: ")
+    orientacaoBarco = input(f"Digite a orientação do barco V ou H: ").upper()
+
+    podePosicionar = True
+    
+    if orientacaoBarco == 'V' and (rowBarco + tamanhoBarco - 1) > 10:
+        print("Erro: O barco ultrapassa o limite inferior do tabuleiro!")
+        sleep(2)
+        continue
+    elif orientacaoBarco == 'H' and (columBarco + tamanhoBarco - 1) > 10:
+        print("Erro: O barco ultrapassa o limite lateral direito!")
+        sleep(2)
+        continue
+    # Criamos variáveis temporárias para não estragar as originais durante o teste
+    checaRow = rowBarco
+    checaCol = columBarco
+    
+    for j in range(tamanhoBarco):
+        if tabuleiroJogador[checaRow][checaCol] == '■':
+            podePosicionar = False
+            break # Se achou um único impedimento, já podemos parar de checar
+            
+        # Avança a simulação passo a passo
+        if orientacaoBarco == 'V':
+            checaRow += 1
+        else:
+            checaCol += 1
+
+    # Se a simulação encontrou um barco no caminho, cancela o posicionamento
+    if not podePosicionar:
+        print("Erro: Já existe um barco bloqueando esse caminho! Escolha outra posição.")
+        sleep(2)
+        continue # Volta para o início do while, pedindo o mesmo barco de novo
+    
+    # Se passou em tudo (Limites E Sobreposição), desenha o barco
+    
     for j in range(tamanhoBarco):
         tabuleiroJogador[rowBarco] [columBarco] = '■'
         if orientacaoBarco == 'V':
             rowBarco += 1
         else:
-            columBarcoBarco += 1
+            columBarco += 1
     tamanhoBarco -= 1
-
-os.system('cls' if os.name == 'nt' else 'clear')
+    os.system('cls' if os.name == 'nt' else 'clear')
