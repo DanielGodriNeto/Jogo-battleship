@@ -59,6 +59,10 @@ tabuleiroComputador = [
     ['J',0,0,0,0,0,0,0,0,0,0]
 ]
 
+# Quantidade de vida baseada no numero de espaços com barco
+vidaJogador = 15
+vidaPC = 15
+
 #  Começa pelo maior barco
 tamanhoBarco = 5
 tamanhoBarcoPC = 5
@@ -85,6 +89,7 @@ while tamanhoBarco > 0:
     except ValueError:
         print("Erro: Digite apenas números para a coluna!")
         continue
+
     if tamanhoBarco > 1:
         orientacaoBarco = input(f"Digite a orientação do barco V ou H: ").upper()
         if orientacaoBarco not in ['V','H']:
@@ -184,5 +189,40 @@ while tamanhoBarcoPC > 0:
 
     tamanhoBarcoPC -= 1
 
-for k in range(11):
-    print (tabuleiroComputador[k])
+while vidaJogador > 0 and vidaPC > 0:
+
+    for c in range (11):
+        print (tabuleiroFeedbackJogador[c])
+
+    tiroRow = input(f"Digite a linha de onde quer atirar: ").upper()
+    if tiroRow in letrasLinhas:
+        rowTiro = letrasLinhas.index(tiroRow) + 1
+    else:
+        print("Erro: Linha inválida! Escolha uma letra de A a J.")
+        continue
+
+    try:
+        columTiro = int(input(f"Digite a coluna de onde quer atirar: "))
+        if columTiro < 1 or columTiro > 10:
+            print("Erro: Coluna deve ser entre 1 e 10.")
+            continue
+    except ValueError:
+        print("Erro: Digite apenas números para a coluna!")
+        continue
+
+    # Checar se o tiro ja foi dado antes
+    if tabuleiroFeedbackJogador[rowTiro][columTiro] in ['X', 'O']:
+        print("Erro: Você já atirou nessa coordenada! Escolha outra posição.")
+        continue
+
+    # Verificar se acertou um barco do computador
+    if tabuleiroComputador[rowTiro][columTiro] == '■':
+        print("Você acertou uma embarcação inimiga!")
+        tabuleiroFeedbackJogador[rowTiro][columTiro] = 'X' # Marca acerto no tabuleiro de feedback
+        tabuleiroComputador[rowTiro][columTiro] = 'X' # Desativa o barco no tabuleiro do PC
+        vidaPC -= 1
+    else:
+        print("Água! Você errou o alvo.")
+        tabuleiroFeedbackJogador[rowTiro][columTiro] = 'O' # Marca agua no tabuleiro de feedback
+
+    os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal para a proxima rodada
