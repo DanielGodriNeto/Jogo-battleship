@@ -265,3 +265,15 @@ while vidaJogador > 0 and vidaPC > 0:
 
         sleep(2.5) # Dá tempo para o jogador ler o que o PC fez antes de limpar a tela
         os.system('cls' if os.name == 'nt' else 'clear')
+
+# Apresenta quem foi o vencedor
+sleep(2.5)
+if vidaPC == 0:
+    print("Parabéns! Você é o vencedor")
+else:
+    print("Que pena! O computador é o vencedor")
+
+# Tela de créditos
+sleep(2.5)
+print("Obrigado por jogar!")
+print('''\nJogo feito por:\nMateus Weiss Medeiros\nDaniel Godri Neto\nGustavo Gomes Luciano''')
