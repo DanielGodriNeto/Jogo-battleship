@@ -2,6 +2,7 @@
 
 import pygame
 import math
+import os
 from constants import C, MODULE_DEFS, UPGRADE_TREE, SIDEBAR_W, BOTTOM_H, VP_PIXELS_W, VP_PIXELS_H
 from entities import Ship, Fish, NPCShip, lerp_color
 
@@ -13,6 +14,9 @@ def draw_text(surf, text, font, color, pos):
 class Renderer:
     def __init__(self, game):
         self.g = game
+        self.sprite_cache = {}
+        self.last_tile = -1
+        self.assets_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Sprites battleship")
 
     @property
     def tile(self):   return self.g.tile
@@ -28,6 +32,66 @@ class Renderer:
     def _vp_w(self):             return VP_PIXELS_W
     def _vp_h(self):             return VP_PIXELS_H
 
+    def _get_sprite(self, category, name, size=None):
+        """Carrega, redimensiona e armazena sprites em cache. Se não encontrar, cria um fallback visual."""
+        if self.tile != self.last_tile:
+            self.sprite_cache.clear()
+            self.last_tile = self.tile
+
+        key = (category, name, size)
+        if key in self.sprite_cache:
+            return self.sprite_cache[key]
+
+        # Mapeamento para os nomes de arquivos em português da sua pasta
+        mapping = {
+            "water": "Agua",
+            "sand": "Areia",
+            "grass": "Grama",
+            "stone": "Montanha",
+            "hull": "Navio",
+            "mortar": "Missel 1.0",
+            "mortar_heavy": "Missel 2.0",
+            "radar": "Radar",
+            "pirate": "Navio"
+        }
+        filename = mapping.get(name, name)
+
+        # Procura o arquivo .png diretamente na pasta "Sprites battleship"
+        path = os.path.join(self.assets_path, f"{filename}.png")
+
+        img = None
+        if os.path.exists(path):
+            try:
+                img = pygame.image.load(path).convert_alpha()
+            except:
+                pass
+
+        try:
+            # Adicionamos 1px extra em tiles de terreno (size is None) para evitar vãos de arredondamento
+            extra = 1 if not size else 0
+            w = int((size[0] if size else 1) * self.tile) + extra
+            h = int((size[1] if size else 1) * self.tile) + extra
+            img = pygame.transform.scale(img, (w, h))
+            self.sprite_cache[key] = img
+            return img
+        except:
+            # Fallback sólido sem cantos arredondados para as peças encostarem perfeitamente
+            w = (size[0] if size else 1) * self.tile
+            h = (size[1] if size else 1) * self.tile
+            fallback = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            color = C.get(name, (100, 100, 100))
+            fallback.fill(color)
+            pygame.draw.rect(fallback, (255, 255, 255, 40), (0, 0, w, h), 1)
+            self.sprite_cache[key] = fallback
+            return fallback
+
+    def _draw_rotated_sprite(self, sprite, center_pos, angle):
+        """Desenha um sprite rotacionado, ajustando para o sistema de coordenadas do jogo."""
+        # Ajuste para o sistema de coordenadas do jogo (0 graus = Leste)
+        rotated = pygame.transform.rotate(sprite, -angle)
+        rect = rotated.get_rect(center=center_pos)
+        self.screen.blit(rotated, rect.topleft)
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Menu
     # ═══════════════════════════════════════════════════════════════════════════
@@ -37,10 +101,10 @@ class Renderer:
         surf = self.screen
         surf.fill((30, 40, 60))
 
-        title = g.font_lg.render("BATALHA NAVAL", True, (255, 255, 255))
+        title = g.font_lg.render("BATALHA NAVAL 2", True, (255, 255, 255))
         surf.blit(title, (g.SCREEN_W // 2 - title.get_width() // 2, 60))
 
-        y = 130
+        y = 150
         g._menu_buttons = []
 
         ms = g.font_md.render("Tamanho do mapa:", True, (220, 220, 220))
@@ -65,7 +129,7 @@ class Renderer:
         sw, sh = 160, 38
         sx = g.SCREEN_W // 2 - sw // 2
         rect_start = pygame.Rect(sx, y, sw, sh)
-        pygame.draw.rect(surf, (60, 180, 80), rect_start)
+        pygame.draw.rect(surf, C['btn_buy'], rect_start)
         pygame.draw.rect(surf, (200, 200, 200), rect_start, 1)
         ts = g.font_md.render("INICIAR", True, (255, 255, 255))
         surf.blit(ts, (sx + sw // 2 - ts.get_width() // 2, y + sh // 2 - ts.get_height() // 2))
@@ -95,17 +159,10 @@ class Renderer:
             for gx in range(col0, col1):
                 sx, sy  = self.w2s(gx, gy)
                 terrain = g.map_grid[gy][gx]
-                if terrain == 'water':
-                    col = C['water_a'] if (gx + gy) % 2 == 0 else C['water_b']
-                    pygame.draw.rect(self.screen, col, (sx, sy, t, t))
-                    pygame.draw.rect(self.screen, C['grid_line'], (sx, sy, t, t), 1)
-                else:
-                    variants = _variants[terrain]
-                    col = variants[(gx * 3 + gy * 7) % len(variants)]
-                    pygame.draw.rect(self.screen, col, (sx, sy, t, t))
-                    border = (200, 185, 110) if terrain == 'sand' else \
-                             ( 35, 100,  50) if terrain == 'grass' else (70, 75, 85)
-                    pygame.draw.rect(self.screen, border, (sx, sy, t, t), 1)
+                
+                # Desenha sprite do terreno (água, areia, etc)
+                tile_sprite = self._get_sprite("tiles", terrain)
+                self.screen.blit(tile_sprite, (sx, sy))
 
         self.draw_npcs(visible)
 
@@ -129,19 +186,12 @@ class Renderer:
             if not self._in_vp(sx, sy): continue
 
             if isinstance(npc, Fish):
-                rad  = math.radians(npc.angle)
-                cx_, cy_ = sx + t / 2, sy + t / 2
-                pts  = [
-                    (cx_ + math.cos(rad) * t * 0.4,      cy_ + math.sin(rad) * t * 0.4),
-                    (cx_ + math.cos(rad + 2.4) * t * 0.2, cy_ + math.sin(rad + 2.4) * t * 0.2),
-                    (cx_ + math.cos(rad - 2.4) * t * 0.2, cy_ + math.sin(rad - 2.4) * t * 0.2),
-                ]
-                pygame.draw.polygon(self.screen, C['fish_col'], pts)
+                fish_sprite = self._get_sprite("npcs", "fish")
+                self._draw_rotated_sprite(fish_sprite, (sx + t/2, sy + t/2), npc.angle)
 
             elif isinstance(npc, NPCShip):
-                col = lerp_color(C['damaged'], C['npc_ship'], npc.hp / npc.max_hp)
-                pygame.draw.rect(self.screen, col, (sx + 3, sy + 3, t - 6, t - 6))
-                pygame.draw.rect(self.screen, C['npc_ship'], (sx + 3, sy + 3, t - 6, t - 6), 1)
+                npc_sprite = self._get_sprite("npcs", "pirate")
+                self.screen.blit(npc_sprite, (sx, sy))
                 ratio = npc.hp / npc.max_hp
                 bw_ = t - 6
                 pygame.draw.rect(self.screen, (40, 20, 20), (sx + 3, sy - 7, bw_, 4))
@@ -153,54 +203,40 @@ class Renderer:
     # ═══════════════════════════════════════════════════════════════════════════
     def draw_ship(self, ship: Ship, visible: set):
         t  = self.tile
-        ox, oy = int(ship.gx), int(ship.gy)
+        ox, oy = round(ship.gx), round(ship.gy)
+        pad = 2 # Define pad para evitar o erro de NameError
 
-        for m in ship.modules:
-            for rx, ry in m.local_tiles():
-                wx, wy = ox + rx, oy + ry
-                if (wx, wy) not in visible: continue
-                sx, sy = self.w2s(wx, wy)
-                if not self._in_vp(sx, sy): continue
+        # Ordenar módulos: Desenhar o 'hull' (casco) primeiro, depois o resto
+        sorted_mods = sorted(ship.modules, key=lambda m: 0 if m.type == 'hull' else 1)
 
-                if m.type == 'hull':
-                    has_top = any(
-                        other.type != 'hull' and not other.destroyed
-                        and (rx, ry) in other.local_tiles()
-                        for other in ship.modules
-                    )
-                    col = tuple(int(c * 0.55) for c in m.color) if has_top else m.color
-                    pad = 1
-                else:
-                    col = m.color
-                    pad = 4
+        for m in sorted_mods:
+            rx_first, ry_first = m.local_tiles()[0]
+            wx, wy = ox + rx_first, oy + ry_first
+            
+            if (wx, wy) not in visible: continue
+            sx, sy = self.w2s(wx, wy)
+            if not self._in_vp(sx, sy): continue
 
-                pygame.draw.rect(self.screen, col, (sx + pad, sy + pad, t - pad * 2, t - pad * 2))
-                pygame.draw.rect(self.screen, ship.player_color,
-                                 (sx + pad, sy + pad, t - pad * 2, t - pad * 2), 1)
-
-                if m.destroyed:
-                    pygame.draw.line(self.screen, C['destroyed'], (sx + 4, sy + 4), (sx + t - 4, sy + t - 4), 2)
-                    pygame.draw.line(self.screen, C['destroyed'], (sx + t - 4, sy + 4), (sx + 4, sy + t - 4), 2)
-                elif m.type != 'hull':
-                    cx_, cy_ = sx + t // 2, sy + t // 2
-                    if 'mortar' in m.type:
-                        pygame.draw.circle(self.screen, (20, 12, 4),  (cx_, cy_), t // 5)
-                        pygame.draw.circle(self.screen, (70, 50, 8),  (cx_, cy_), t // 8)
-                    elif m.type == 'armor':
-                        pygame.draw.rect(self.screen, (40, 80, 120),
-                                         (sx + pad + 2, sy + pad + 2, t - pad * 2 - 4, t - pad * 2 - 4), 2)
-                    elif 'engine' in m.type:
-                        for i in range(3):
-                            ey = sy + pad + 2 + i * (t - pad * 2 - 4) // 3
-                            pygame.draw.line(self.screen, (100, 40, 120), (sx + pad, ey), (sx + t - pad, ey), 2)
-                    elif m.type in ('research', 'radar'):
-                        pygame.draw.circle(self.screen, (30, 100, 50), (cx_, cy_), t // 5, 2)
-
-                    dot_r = max(1, t // 12)
-                    for i in range(m.max_hp):
-                        dc = (50, 200, 80) if i < m.hp else (80, 30, 30)
-                        pygame.draw.circle(self.screen, dc,
-                                           (sx + pad + 2 + i * (dot_r * 2 + 1), sy + pad + 2), dot_r)
+            # Desenha o sprite do módulo (Hull, Mortar, etc)
+            mod_sprite = self._get_sprite("modules", m.type, (m.current_w, m.current_h))
+            if m.rotated:
+                mod_sprite = pygame.transform.rotate(mod_sprite, 90)
+            
+            self.screen.blit(mod_sprite, (sx, sy))
+            
+            # Feedback de destruição
+            if m.destroyed:
+                overlay = pygame.Surface((m.current_w * t, m.current_h * t), pygame.SRCALPHA)
+                overlay.fill((20, 0, 0, 160))
+                self.screen.blit(overlay, (sx, sy))
+                pygame.draw.line(self.screen, C['destroyed'], (sx, sy), (sx + m.current_w*t, sy + m.current_h*t), 3)
+            
+            # Pontos de vida (HP) pequenos em cima do módulo
+            if not m.destroyed and m.type != 'hull':
+                dot_r = max(2, t // 10)
+                for i in range(m.max_hp):
+                    col = (50, 255, 100) if i < m.hp else (255, 50, 50)
+                    pygame.draw.circle(self.screen, col, (sx + 8 + i*(dot_r*2 + 2), sy + 8), dot_r)
 
         h = ship.hull
         if h and not h.destroyed:
@@ -217,7 +253,7 @@ class Renderer:
                         (ex + int(math.cos(rad + 2.5) * 5), ey + int(math.sin(rad + 2.5) * 5)),
                         (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
                     ])
-                    bx, by = self.w2s(int(ship.gx), int(ship.gy))
+                    bx, by = self.w2s(round(ship.gx), round(ship.gy))
                     by += t * h.h + 2
                     bw  = t * h.w - 4
                     ratio = h.hp / h.max_hp
@@ -235,7 +271,7 @@ class Renderer:
         h = ship.hull
         if h:
             for rx, ry in h.local_tiles():
-                sx, sy = self.w2s(int(nx) + rx, int(ny) + ry)
+                sx, sy = self.w2s(round(nx) + rx, round(ny) + ry)
                 pygame.draw.rect(self.screen, C['ghost_fill'], (sx + 3, sy + 3, t - 6, t - 6))
                 pygame.draw.rect(self.screen, C['ghost'],      (sx + 3, sy + 3, t - 6, t - 6), 1)
             gsx, gsy = self.w2s(nx + h.w / 2, ny + h.h / 2)
@@ -270,52 +306,7 @@ class Renderer:
 
     def draw_particles(self, particles):
         for p in particles:
-            p.update()
             p.draw(self.screen)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Tooltip de módulo (hover no barco)
-    # ═══════════════════════════════════════════════════════════════════════════
-    def draw_tooltip(self, mod, mx, my):
-        """Janela flutuante com info do módulo e seu próximo upgrade."""
-        g    = self.g
-        surf = self.screen
-        font = g.font_sm
-        xs   = g.font_xs
-
-        up_key  = UPGRADE_TREE.get(mod.type)
-        up_def  = MODULE_DEFS[up_key] if up_key else None
-
-        lines = [
-            (mod.name,           C['highlight'], font),
-            (mod.type_label if hasattr(mod, 'type_label') else MODULE_DEFS[mod.type]['desc'],
-             C['text'], xs),
-            (f"HP: {mod.hp}/{mod.max_hp}", C['text_dim'], xs),
-        ]
-        if up_def:
-            lines.append(("", C['text_dim'], xs))
-            lines.append((f"▲ Upgrade: {up_def['name']}",  C['p1'], xs))
-            lines.append((f"  Custo: ${up_def['cost']}",   C['money'], xs))
-            lines.append((f"  {up_def['desc']}",           C['text_dim'], xs))
-        else:
-            lines.append(("  (nível máximo)", C['text_dim'], xs))
-
-        pad = 8
-        line_h = 15
-        w = max(font.size(l[0])[0] for l in lines) + pad * 2
-        h = len(lines) * line_h + pad * 2
-
-        tx = min(mx + 12, self.g.SCREEN_W - w - 4)
-        ty = max(my - h - 4, 4)
-
-        pygame.draw.rect(surf, C['ui_panel'],  (tx, ty, w, h), border_radius=4)
-        pygame.draw.rect(surf, C['ui_border'], (tx, ty, w, h), 1, border_radius=4)
-
-        cy = ty + pad
-        for text, color, f in lines:
-            if text:
-                surf.blit(f.render(text, True, color), (tx + pad, cy))
-            cy += line_h
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HUD — sidebar e bottom
@@ -347,10 +338,10 @@ class Renderer:
         ship = g.ships[g.turn]
         pc   = C['p1'] if g.turn == 0 else C['p2']
         line(f"JOGADOR {g.turn+1}", pc, g.font_lg)
+        line(f"Dinheiro: ${ship.money}", C['money'], g.font_md)
 
-        money_surf = g.font_md.render(f"${ship.money}", True, C['money'])
-        surf.blit(money_surf, (x0 + SIDEBAR_W - money_surf.get_width() - 10, 10))
-
+        sep()
+        
         if g.phase == 'end' and g.winner is not None:
             wc = C['p1'] if g.winner == 0 else C['p2']
             line(f"J{g.winner+1} VENCEU!", wc, g.font_md)
@@ -361,20 +352,19 @@ class Renderer:
 
         sep()
 
+        line("CONTROLES", C['text_dim'])
         if g.phase == 'move':
-            line("CONTROLES", C['text_dim'])
-            line(f"← →  Leme: {g.steering:+.0f}°",        indent=6)
-            line(f"↑ ↓  Vel: {g.speed}/{ship.max_speed}",  indent=6)
-            line(f"     Rumo: {ship.angle:.0f}°",           indent=6)
-            line("ENTER Confirmar", C['highlight'], indent=6)
-            line("Scroll/Z/X Zoom", C['text_dim'],  indent=6)
-
+            line(f"← → Leme: {g.steering:+.0f}°", indent=6)
+            line(f"↑ ↓ Vel: {g.speed}/{ship.max_speed}", indent=6)
+            line(f"Rumo: {ship.angle:.0f}°", indent=6)
+            line("ENTER: Confirmar", C['highlight'], indent=6)
         elif g.phase == 'action':
-            line("MORTEIRO", C['text_dim'])
+            line("Mira: Mouse", indent=6)
+            line("Atirar: Clique", indent=6)
+            line("Pular: ESPAÇO", C['highlight'], indent=6)
             if ship.has_mortar():
-                line(f"Alcance: {ship.mortar_range()} tiles", indent=6)
-                line(f"Dano:    {ship.mortar_damage()}×",      indent=6)
-            line("SPACE = Pular", C['highlight'], indent=6)
+                line(f"Alcance: {ship.mortar_range()} tiles", C['text_dim'], indent=6)
+                line(f"Dano: {ship.mortar_damage()}x", C['text_dim'], indent=6)
 
         elif g.phase == 'shop':
             self._draw_shop(x0, y)
@@ -383,14 +373,14 @@ class Renderer:
         sep()
         line("MÓDULOS", C['text_dim'])
         for m in ship.modules:
-            if m.type == 'hull':
-                h = ship.hull
-                line(f"  Casco {h.w}×{h.h}  {h.hp}/{h.max_hp}HP", C[h.color_key], g.font_xs)
-                continue
-            hp_str = "✕ DESTRUÍDO" if m.destroyed else f"{m.hp}/{m.max_hp}HP"
-            mc = m.color if not m.destroyed else C['damaged']
-            line(f"  {m.name[:14]:14s}{hp_str}", mc, g.font_xs)
+            if m.type == 'hull': # Casco está sempre presente e não é destruído
+                line(f"  Casco: {m.hp}/{m.max_hp} HP", C[m.color_key], g.font_xs)
+            else:
+                hp_str = "DESTRUÍDO" if m.destroyed else f"{m.hp}/{m.max_hp} HP"
+                mc = C['damaged'] if m.destroyed else m.color # Usa a cor do módulo se não estiver destruído
+                line(f"  {m.name}: {hp_str}", mc, g.font_xs)
 
+        line("Zoom: Z/X ou Scroll", C['text_dim'], indent=6)
         sep()
 
         mm_w = SIDEBAR_W - 24
@@ -429,20 +419,18 @@ class Renderer:
         sep()
 
         items = ship.available_purchases()
-        BW, BH = SIDEBAR_W - 24, 38
+        BW, BH = SIDEBAR_W - 24, 30 # Altura do botão reduzida para visual mais compacto
 
-        for action, mod_type, name, cost, can, desc in items[:6]:
+        for action, mod_type, name, cost, can, desc in items: # Iterar todos os itens
             rect = pygame.Rect(x0 + 12, y, BW, BH)
             hov  = rect.collidepoint(mouse)
             if not can:          bg = C['btn_dis']
-            elif action == 'hull_expand': bg = (0, 80, 120) if not hov else (0, 110, 160)
             elif hov:            bg = C['btn_buy_h']
             else:                bg = C['btn_buy']
             pygame.draw.rect(surf, bg, rect, border_radius=4)
             pygame.draw.rect(surf, C['ui_border'], rect, 1, border_radius=4)
             tc = C['text'] if can else C['text_dim']
-            surf.blit(g.font_sm.render(f"{name[:18]} ${cost}", True, tc), (x0 + 16, y + 4))
-            surf.blit(g.font_xs.render(desc[:32], True, C['text_dim']), (x0 + 16, y + 20))
+            surf.blit(g.font_sm.render(f"{name} (${cost})", True, tc), (x0 + 16, y + (BH // 2) - (g.font_sm.get_height() // 2))) # Centraliza texto verticalmente
             g._shop_rects.append((rect, action, mod_type))
             y += BH + 4
 
@@ -490,7 +478,7 @@ class Renderer:
         hint = {
             'move'  : "← → Leme   ↑ ↓ Vel   ENTER Mover   Scroll/Z/X Zoom",
             'action': "Mouse = Mirar   Click = Fogo   SPACE = Pular",
-            'shop'  : "Clique = Comprar/Upgrade   ENTER = Pular loja   (Hover no barco = info módulo)",
+            'shop'  : "Clique = Comprar/Upgrade   ENTER = Pular loja",
             'end'   : "R = Menu",
         }.get(g.phase, "")
         hs = g.font_sm.render(hint, True, C['text_dim'])

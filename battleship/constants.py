@@ -78,13 +78,6 @@ UPGRADE_TREE = {
     'mortar'        : 'mortar_heavy',
 }
 
-HULL_UPGRADES = [
-    (4, 3,  250),
-    (5, 4,  500),
-    (6, 5,  750),
-    (7, 6, 1000),
-]
-
 DIRS = {
     'N': (0, -1, 270),
     'S': (0,  1,  90),

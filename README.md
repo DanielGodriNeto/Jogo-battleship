@@ -21,7 +21,7 @@ O jogo conta com uma renderização inteligente baseada em uma Viewport fixa com
 
 ## 🚀 Mecânicas e Funcionalidades de Destaque
 
-- 🧭 **Navegação Realista (Fase Move):** Controle de direção baseado em ângulo de Leme (-90° a +90° com passos de 15°) e aceleração do Motor Diesel, gerando movimentações fluidas por vetores no mapa.
+- 🧭 **Navegação Realista (Fase Move):** Controle de direção baseado em ângulo de Leme (-45° a +45° com passos de 15°) e aceleração do Motor Diesel, gerando movimentações fluidas por vetores no mapa.
 - 🟢 **Radar e Sistema de Sonar Ativo:** Linha verde giratória estilizada que detecta embarcações inimigas ruidosas (NPCs e Jogador 2) baseando o raio de escaneamento diretamente no nível de emissão de ruído do motor. Exibe coordenadas geográficas (Lat/Lon) em tempo real.
 - 🌫️ **Névoa de Guerra (Fog of War):** Algoritmo de renderização que oculta elementos do mapa fora do raio de visão estratégico das embarcações, forçando o uso do sonar para rastreamento.
 - 🛠️ **Fase de Construção Modular (Fase Build):** Permite encaixar fisicamente novos módulos na estrutura do navio. Os blocos podem ser rotacionados (`R`) antes da instalação e possuem caixas de colisão próprias.
