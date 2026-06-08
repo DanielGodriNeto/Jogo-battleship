@@ -6,11 +6,6 @@ import os
 from constants import C, MODULE_DEFS, UPGRADE_TREE, SIDEBAR_W, BOTTOM_H, VP_PIXELS_W, VP_PIXELS_H
 from entities import Ship, Fish, NPCShip, lerp_color
 
-
-def draw_text(surf, text, font, color, pos):
-    surf.blit(font.render(text, True, color), pos)
-
-
 class Renderer:
     def __init__(self, game):
         self.g = game
@@ -92,6 +87,14 @@ class Renderer:
         rect = rotated.get_rect(center=center_pos)
         self.screen.blit(rotated, rect.topleft)
 
+    def _draw_hp_bar(self, x, y, w, ratio):
+        """Helper para desenhar barras de vida consistentes."""
+        if ratio <= 0: return
+        pygame.draw.rect(self.screen, (40, 20, 20), (x, y, w, 4))
+        # Cor transiciona de Verde para Vermelho baseado no ratio
+        hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
+        pygame.draw.rect(self.screen, hpc, (x, y, int(w * ratio), 4))
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Menu
     # ═══════════════════════════════════════════════════════════════════════════
@@ -149,12 +152,6 @@ class Renderer:
         col1 = min(gs, col0 + int(self._vp_w() / t) + 3)
         row1 = min(gs, row0 + int(self._vp_h() / t) + 3)
 
-        _variants = {
-            'sand' : [(230, 205, 130), (240, 215, 148), (220, 198, 118)],
-            'grass': [( 48, 130,  65), ( 60, 148,  78), ( 42, 118,  58)],
-            'stone': [(100, 106, 115), (118, 124, 135), ( 88,  94, 105)],
-        }
-
         for gy in range(row0, row1):
             for gx in range(col0, col1):
                 sx, sy  = self.w2s(gx, gy)
@@ -192,11 +189,7 @@ class Renderer:
             elif isinstance(npc, NPCShip):
                 npc_sprite = self._get_sprite("npcs", "pirate")
                 self.screen.blit(npc_sprite, (sx, sy))
-                ratio = npc.hp / npc.max_hp
-                bw_ = t - 6
-                pygame.draw.rect(self.screen, (40, 20, 20), (sx + 3, sy - 7, bw_, 4))
-                hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
-                pygame.draw.rect(self.screen, hpc, (sx + 3, sy - 7, int(bw_ * ratio), 4))
+                self._draw_hp_bar(sx + 3, sy - 7, t - 6, npc.hp / npc.max_hp)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Navio
@@ -204,8 +197,6 @@ class Renderer:
     def draw_ship(self, ship: Ship, visible: set):
         t  = self.tile
         ox, oy = round(ship.gx), round(ship.gy)
-        pad = 2 # Define pad para evitar o erro de NameError
-
         # Ordenar módulos: Desenhar o 'hull' (casco) primeiro, depois o resto
         sorted_mods = sorted(ship.modules, key=lambda m: 0 if m.type == 'hull' else 1)
 
@@ -255,11 +246,7 @@ class Renderer:
                     ])
                     bx, by = self.w2s(round(ship.gx), round(ship.gy))
                     by += t * h.h + 2
-                    bw  = t * h.w - 4
-                    ratio = h.hp / h.max_hp
-                    pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bw, 4))
-                    hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
-                    pygame.draw.rect(self.screen, hpc, (bx, by, int(bw * ratio), 4))
+                    self._draw_hp_bar(bx, by, t * h.w - 4, h.hp / h.max_hp)
 
     def draw_ghost(self, ghost, ship: Ship):
         if not ghost: return
@@ -458,16 +445,11 @@ class Renderer:
         for i, ship in enumerate(g.ships):
             c   = C['p1'] if i == 0 else C['p2']
             h   = ship.hull
-            hp_r = h.hp / h.max_hp if (h and h.max_hp > 0) else 0
             lbl  = f"J{i+1} Casco {h.hp}/{h.max_hp}" if (h and not h.destroyed) else f"J{i+1} AFUNDOU"
             surf.blit(g.font_md.render(lbl, True, c), (12 + i * 250, y0 + 6))
 
-            bx, by, bw, bh = 12 + i * 250, y0 + 28, 210, 8
-            pygame.draw.rect(surf, (40, 20, 20), (bx, by, bw, bh))
-            if hp_r > 0:
-                bar_c = (int(200 * (1 - hp_r) + 40 * hp_r), int(40 * (1 - hp_r) + 200 * hp_r), 40)
-                pygame.draw.rect(surf, bar_c, (bx, by, int(bw * hp_r), bh))
-            pygame.draw.rect(surf, c, (bx, by, bw, bh), 1)
+            bx, by, bw = 12 + i * 250, y0 + 28, 210
+            self._draw_hp_bar(bx, by, bw, h.hp / h.max_hp if h else 0)
             surf.blit(g.font_xs.render(f"${ship.money}", True, C['money']), (bx, y0 + 42))
 
             if i == g.turn and g.phase != 'end':

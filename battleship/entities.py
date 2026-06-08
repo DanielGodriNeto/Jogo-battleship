@@ -2,7 +2,7 @@
 
 import math
 import random
-from constants import C, MODULE_DEFS, UPGRADE_TREE, FOG_RADIUS_BASE, GRID_SIZE
+from constants import C, MODULE_DEFS, UPGRADE_TREE, FOG_RADIUS_BASE
 
 
 def lerp_color(a, b, t):
@@ -25,10 +25,8 @@ class Module:
 
     @property
     def current_w(self): return self.h if self.rotated else self.w
-
     @property
     def current_h(self): return self.w if self.rotated else self.h
-
     @property
     def destroyed(self): return self.hp <= 0
 
@@ -142,19 +140,15 @@ class Ship:
 
     def take_damage_at(self, wx, wy, amount=1):
         ox, oy = round(self.gx), round(self.gy)
-        hit_mod = None
-        for m in self.modules:
-            if m.destroyed or m.type == 'hull':
-                continue
+        
+        # Prioritiza módulos funcionais, deixa o casco por último
+        targets = [m for m in self.modules if not m.destroyed and m.type != 'hull']
+        if self.hull: targets.append(self.hull)
+
+        for m in targets:
             if any(ox + rx == wx and oy + ry == wy for rx, ry in m.local_tiles()):
-                hit_mod = m
-                break
-        if hit_mod is None and self.hull:
-            if any(ox + rx == wx and oy + ry == wy for rx, ry in self.hull.local_tiles()):
-                hit_mod = self.hull
-        if hit_mod:
-            hit_mod.damage(amount)
-            return True
+                m.damage(amount)
+                return True
         return False
 
     def preview_move(self, steering, speed, grid_size):

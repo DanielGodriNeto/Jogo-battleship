@@ -41,50 +41,34 @@ class Radar:
             ang = math.degrees(math.atan2(ty - py, tx - px)) % 360
             diff = (ang - self.angle + 360) % 360
             return diff < self.speed * 2 or diff > 360 - self.speed * 2
-
-        # ── Inimigo jogador ────────────────────────────────────────────────────
-        if not enemy.is_silent:
-            ex, ey = enemy.center()
-            if _sweep_hit(ex, ey):
-                self.pings.append({
-                    'wx': ex, 'wy': ey,
-                    'life': self.PING_LIFE_ENEMY,
-                    'max_life': self.PING_LIFE_ENEMY,
-                    'kind': 'enemy',
-                })
-
-        # ── NPCs ───────────────────────────────────────────────────────────────
+        
+        # ── Detecção de Entidades (Jogadores e NPCs) ──────────────────────────
         from entities import NPCShip, Fish
+        
+        targets = []
+        if not enemy.is_silent: targets.append((enemy, 'enemy', self.PING_LIFE_ENEMY))
         for npc in npcs:
-            if not npc.alive:
-                continue
-            nx, ny = npc.gx, npc.gy
-            if not _sweep_hit(nx, ny):
-                continue
-            if isinstance(npc, Fish):
+            if not npc.alive: continue
+            kind = 'fish' if isinstance(npc, Fish) else 'npc'
+            life = self.PING_LIFE_FISH if kind == 'fish' else self.PING_LIFE_NPC
+            targets.append((npc, kind, life))
+
+        for obj, kind, max_l in targets:
+            ox, oy = (obj.center() if hasattr(obj, 'center') else (obj.gx, obj.gy))
+            if _sweep_hit(ox, oy):
                 self.pings.append({
-                    'wx': nx, 'wy': ny,
-                    'life': self.PING_LIFE_FISH,
-                    'max_life': self.PING_LIFE_FISH,
-                    'kind': 'fish',
-                })
-            elif isinstance(npc, NPCShip):
-                self.pings.append({
-                    'wx': nx, 'wy': ny,
-                    'life': self.PING_LIFE_NPC,
-                    'max_life': self.PING_LIFE_NPC,
-                    'kind': 'npc',
+                    'wx': ox, 'wy': oy,
+                    'life': max_l, 'max_life': max_l, 'kind': kind
                 })
 
         # ── Ilhas (tiles de terra na área de varredura) ────────────────────────
-        # Amostra tiles em torno do jogador dentro do noise_radius
-        sample_step = max(1, int(noise_radius / 8))  # não escaneia todo tile (performance)
+        sample_step = max(1, int(noise_radius / 8))
         sweep_rad   = math.radians(self.angle)
-        # Varre uma "fatia" em torno do ângulo atual — só os tiles que a linha tocou
+        
+        # Varre apenas a linha atual do sweep para otimizar performance
         for dist_step in range(1, int(noise_radius) + 1, sample_step):
-            tx = px + math.cos(sweep_rad) * dist_step
-            ty = py + math.sin(sweep_rad) * dist_step
-            igx, igy = int(tx), int(ty)
+            igx = int(px + math.cos(sweep_rad) * dist_step)
+            igy = int(py + math.sin(sweep_rad) * dist_step)
             if 0 <= igx < grid_size and 0 <= igy < grid_size:
                 if map_grid[igy][igx] != 'water':
                     key = (igx, igy)
@@ -104,8 +88,7 @@ class Radar:
                 del self._island_pings[k]
 
         # Decai pings normais
-        for p in self.pings:
-            p['life'] -= 1
+        for p in self.pings: p['life'] -= 1
         self.pings = [p for p in self.pings if p['life'] > 0]
 
     # ─────────────────────── Draw ─────────────────────────────────────────────
