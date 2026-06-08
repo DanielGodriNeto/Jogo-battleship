@@ -1,8 +1,8 @@
-# renderer.py — Toda a lógica de desenho
+# renderer.py
 
 import pygame
 import math
-from constants import C, MODULE_DEFS, SIDEBAR_W, BOTTOM_H, VP_PIXELS_W, VP_PIXELS_H
+from constants import C, MODULE_DEFS, UPGRADE_TREE, SIDEBAR_W, BOTTOM_H, VP_PIXELS_W, VP_PIXELS_H
 from entities import Ship, Fish, NPCShip, lerp_color
 
 
@@ -23,15 +23,14 @@ class Renderer:
     @property
     def cam_y(self):  return self.g.cam_y
 
-    def w2s(self, gx, gy):    return self.g.w2s(gx, gy)
-    def _in_vp(self, sx, sy): return self.g._in_vp(sx, sy)
-    def _vp_w(self):           return VP_PIXELS_W
-    def _vp_h(self):           return VP_PIXELS_H
+    def w2s(self, gx, gy):       return self.g.w2s(gx, gy)
+    def _in_vp(self, sx, sy):    return self.g._in_vp(sx, sy)
+    def _vp_w(self):             return VP_PIXELS_W
+    def _vp_h(self):             return VP_PIXELS_H
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Menu
     # ═══════════════════════════════════════════════════════════════════════════
-
     def draw_menu(self):
         from constants import MAP_SIZES
         g    = self.g
@@ -49,32 +48,32 @@ class Renderer:
         y += 30
 
         bw, bh = 90, 30
-        total_w = len(MAP_SIZES) * (bw + 10) - 10
+        total_w  = len(MAP_SIZES) * (bw + 10) - 10
         bx_start = g.SCREEN_W // 2 - total_w // 2
         for i, key in enumerate(MAP_SIZES):
             bx   = bx_start + i * (bw + 10)
             rect = pygame.Rect(bx, y, bw, bh)
             sel  = key == g.map_choice
-            pygame.draw.rect(surf, (80, 120, 180) if sel else (60, 80, 120), rect)
+            col  = (80, 120, 180) if sel else (60, 80, 120)
+            pygame.draw.rect(surf, col, rect)
             pygame.draw.rect(surf, (200, 200, 200), rect, 1)
             lbl = g.font_sm.render(key, True, (255, 255, 255) if sel else (200, 200, 200))
             surf.blit(lbl, (bx + bw // 2 - lbl.get_width() // 2, y + 4))
             g._menu_buttons.append((rect, key))
         y += bh + 20
 
-        sw, sh   = 160, 38
-        sx       = g.SCREEN_W // 2 - sw // 2
-        rect_s   = pygame.Rect(sx, y, sw, sh)
-        pygame.draw.rect(surf, (60, 180, 80), rect_s)
-        pygame.draw.rect(surf, (200, 200, 200), rect_s, 1)
+        sw, sh = 160, 38
+        sx = g.SCREEN_W // 2 - sw // 2
+        rect_start = pygame.Rect(sx, y, sw, sh)
+        pygame.draw.rect(surf, (60, 180, 80), rect_start)
+        pygame.draw.rect(surf, (200, 200, 200), rect_start, 1)
         ts = g.font_md.render("INICIAR", True, (255, 255, 255))
         surf.blit(ts, (sx + sw // 2 - ts.get_width() // 2, y + sh // 2 - ts.get_height() // 2))
-        g._menu_buttons.append((rect_s, 'start'))
+        g._menu_buttons.append((rect_start, 'start'))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Mundo
+    # Mundo / tiles
     # ═══════════════════════════════════════════════════════════════════════════
-
     def draw_world(self, visible: set):
         g  = self.g
         t  = self.tile
@@ -101,7 +100,8 @@ class Renderer:
                     pygame.draw.rect(self.screen, col, (sx, sy, t, t))
                     pygame.draw.rect(self.screen, C['grid_line'], (sx, sy, t, t), 1)
                 else:
-                    col = _variants[terrain][(gx * 3 + gy * 7) % 3]
+                    variants = _variants[terrain]
+                    col = variants[(gx * 3 + gy * 7) % len(variants)]
                     pygame.draw.rect(self.screen, col, (sx, sy, t, t))
                     border = (200, 185, 110) if terrain == 'sand' else \
                              ( 35, 100,  50) if terrain == 'grass' else (70, 75, 85)
@@ -115,8 +115,7 @@ class Renderer:
         ft.fill((8, 12, 24, 210))
         for row in range(int(self._vp_h() / t) + 2):
             for col in range(int(self._vp_w() / t) + 2):
-                wx = int(self.cam_x) + col
-                wy = int(self.cam_y) + row
+                wx, wy = int(self.cam_x) + col, int(self.cam_y) + row
                 if (wx, wy) not in visible:
                     sx, sy = self.w2s(wx, wy)
                     self.screen.blit(ft, (sx, sy))
@@ -125,50 +124,43 @@ class Renderer:
         t = self.tile
         for npc in self.g.npcs:
             wx, wy = int(npc.gx), int(npc.gy)
-            if (wx, wy) not in visible:
-                continue
+            if (wx, wy) not in visible: continue
             sx, sy = self.w2s(wx, wy)
-            if not self._in_vp(sx, sy):
-                continue
+            if not self._in_vp(sx, sy): continue
 
             if isinstance(npc, Fish):
-                rad = math.radians(npc.angle)
-                cx, cy = sx + t / 2, sy + t / 2
-                pts = [
-                    (cx + math.cos(rad) * t * 0.4,     cy + math.sin(rad) * t * 0.4),
-                    (cx + math.cos(rad + 2.4) * t * 0.2, cy + math.sin(rad + 2.4) * t * 0.2),
-                    (cx + math.cos(rad - 2.4) * t * 0.2, cy + math.sin(rad - 2.4) * t * 0.2),
+                rad  = math.radians(npc.angle)
+                cx_, cy_ = sx + t / 2, sy + t / 2
+                pts  = [
+                    (cx_ + math.cos(rad) * t * 0.4,      cy_ + math.sin(rad) * t * 0.4),
+                    (cx_ + math.cos(rad + 2.4) * t * 0.2, cy_ + math.sin(rad + 2.4) * t * 0.2),
+                    (cx_ + math.cos(rad - 2.4) * t * 0.2, cy_ + math.sin(rad - 2.4) * t * 0.2),
                 ]
                 pygame.draw.polygon(self.screen, C['fish_col'], pts)
+
             elif isinstance(npc, NPCShip):
                 col = lerp_color(C['damaged'], C['npc_ship'], npc.hp / npc.max_hp)
                 pygame.draw.rect(self.screen, col, (sx + 3, sy + 3, t - 6, t - 6))
                 pygame.draw.rect(self.screen, C['npc_ship'], (sx + 3, sy + 3, t - 6, t - 6), 1)
                 ratio = npc.hp / npc.max_hp
-                bx, by = sx + 3, sy - 7
-                pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, t - 6, 4))
+                bw_ = t - 6
+                pygame.draw.rect(self.screen, (40, 20, 20), (sx + 3, sy - 7, bw_, 4))
                 hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
-                pygame.draw.rect(self.screen, hpc, (bx, by, int((t - 6) * ratio), 4))
+                pygame.draw.rect(self.screen, hpc, (sx + 3, sy - 7, int(bw_ * ratio), 4))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Barco
+    # Navio
     # ═══════════════════════════════════════════════════════════════════════════
-
     def draw_ship(self, ship: Ship, visible: set):
-        t      = self.tile
+        t  = self.tile
         ox, oy = int(ship.gx), int(ship.gy)
-        mx, my = pygame.mouse.get_pos()
-
-        hovered_mod = None  # módulo sob o mouse neste frame
 
         for m in ship.modules:
             for rx, ry in m.local_tiles():
                 wx, wy = ox + rx, oy + ry
-                if (wx, wy) not in visible:
-                    continue
+                if (wx, wy) not in visible: continue
                 sx, sy = self.w2s(wx, wy)
-                if not self._in_vp(sx, sy):
-                    continue
+                if not self._in_vp(sx, sy): continue
 
                 if m.type == 'hull':
                     has_top = any(
@@ -187,23 +179,20 @@ class Renderer:
                                  (sx + pad, sy + pad, t - pad * 2, t - pad * 2), 1)
 
                 if m.destroyed:
-                    pygame.draw.line(self.screen, C['destroyed'],
-                                     (sx + 4, sy + 4), (sx + t - 4, sy + t - 4), 2)
-                    pygame.draw.line(self.screen, C['destroyed'],
-                                     (sx + t - 4, sy + 4), (sx + 4, sy + t - 4), 2)
+                    pygame.draw.line(self.screen, C['destroyed'], (sx + 4, sy + 4), (sx + t - 4, sy + t - 4), 2)
+                    pygame.draw.line(self.screen, C['destroyed'], (sx + t - 4, sy + 4), (sx + 4, sy + t - 4), 2)
                 elif m.type != 'hull':
                     cx_, cy_ = sx + t // 2, sy + t // 2
                     if 'mortar' in m.type:
-                        pygame.draw.circle(self.screen, (20, 12, 4), (cx_, cy_), t // 5)
-                        pygame.draw.circle(self.screen, (70, 50, 8), (cx_, cy_), t // 8)
+                        pygame.draw.circle(self.screen, (20, 12, 4),  (cx_, cy_), t // 5)
+                        pygame.draw.circle(self.screen, (70, 50, 8),  (cx_, cy_), t // 8)
                     elif m.type == 'armor':
                         pygame.draw.rect(self.screen, (40, 80, 120),
                                          (sx + pad + 2, sy + pad + 2, t - pad * 2 - 4, t - pad * 2 - 4), 2)
                     elif 'engine' in m.type:
                         for i in range(3):
                             ey = sy + pad + 2 + i * (t - pad * 2 - 4) // 3
-                            pygame.draw.line(self.screen, (100, 40, 120),
-                                             (sx + pad, ey), (sx + t - pad, ey), 2)
+                            pygame.draw.line(self.screen, (100, 40, 120), (sx + pad, ey), (sx + t - pad, ey), 2)
                     elif m.type in ('research', 'radar'):
                         pygame.draw.circle(self.screen, (30, 100, 50), (cx_, cy_), t // 5, 2)
 
@@ -213,13 +202,6 @@ class Renderer:
                         pygame.draw.circle(self.screen, dc,
                                            (sx + pad + 2 + i * (dot_r * 2 + 1), sy + pad + 2), dot_r)
 
-                # Detecta hover (qualquer módulo não-hull)
-                if m.type != 'hull' and not m.destroyed:
-                    tile_rect = pygame.Rect(sx + pad, sy + pad, t - pad * 2, t - pad * 2)
-                    if tile_rect.collidepoint(mx, my):
-                        hovered_mod = m
-
-        # Seta de heading e barra de HP
         h = ship.hull
         if h and not h.destroyed:
             cx, cy = ship.center()
@@ -236,93 +218,34 @@ class Renderer:
                         (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
                     ])
                     bx, by = self.w2s(int(ship.gx), int(ship.gy))
-                    by  += t * h.h + 2
-                    bw   = t * h.w - 4
+                    by += t * h.h + 2
+                    bw  = t * h.w - 4
                     ratio = h.hp / h.max_hp
                     pygame.draw.rect(self.screen, (40, 20, 20), (bx, by, bw, 4))
                     hpc = (int(200 * (1 - ratio) + 40 * ratio), int(40 * (1 - ratio) + 200 * ratio), 40)
                     pygame.draw.rect(self.screen, hpc, (bx, by, int(bw * ratio), 4))
 
-        # Tooltip de upgrade ao fazer hover num módulo
-        if hovered_mod:
-            tooltip = ship.upgrade_tooltip(hovered_mod.type)
-            self._draw_module_tooltip(mx, my, hovered_mod, tooltip, ship)
-
-    def _draw_module_tooltip(self, mx, my, mod, tooltip, ship):
-        """Janela flutuante que aparece ao hover num módulo."""
-        g     = self.g
-        font  = g.font_sm
-        fontx = g.font_xs
-
-        lines = [
-            (f"{mod.name}", C['text'], font),
-            (f"HP: {mod.hp}/{mod.max_hp}", C['text_dim'], fontx),
-        ]
-        if tooltip:
-            up_name, up_cost, up_desc = tooltip
-            can = ship.money >= up_cost
-            lines.append(("", C['text_dim'], fontx))
-            lines.append(("▲ UPGRADE:", C['highlight'], fontx))
-            lines.append((f"  {up_name}", C['text'], fontx))
-            lines.append((f"  {up_desc}", C['text_dim'], fontx))
-            cost_col = (80, 220, 80) if can else (220, 80, 80)
-            lines.append((f"  Custo: ${up_cost}", cost_col, fontx))
-        else:
-            lines.append(("Sem upgrade disponível", C['text_dim'], fontx))
-
-        pad = 6
-        tw  = max(f.size(t)[0] for t, _, f in lines) + pad * 2
-        th  = sum(f.get_height() + 2 for _, _, f in lines) + pad * 2
-
-        # Posiciona a janela sem sair da tela
-        tx = min(mx + 12, self._vp_w() - tw - 4)
-        ty = min(my + 12, self._vp_h() + self.g.SCREEN_H - th - 4)
-        ty = max(0, ty)
-
-        bg = pygame.Surface((tw, th), pygame.SRCALPHA)
-        bg.fill((12, 18, 30, 220))
-        self.screen.blit(bg, (tx, ty))
-        pygame.draw.rect(self.screen, C['ui_border'], (tx, ty, tw, th), 1)
-
-        cy = ty + pad
-        for text, col, f in lines:
-            if text:
-                self.screen.blit(f.render(text, True, col), (tx + pad, cy))
-            cy += f.get_height() + 2
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Fantasma de movimento
-    # ═══════════════════════════════════════════════════════════════════════════
-
     def draw_ghost(self, ghost, ship: Ship):
-        if not ghost:
-            return
+        if not ghost: return
         nx, ny, na, path = ghost
         t = self.tile
         for i, (px, py) in enumerate(path):
             scx, scy = self.w2s(px + 1.5, py + 1.0)
             pygame.draw.circle(self.screen, C['ghost_path'], (scx, scy), 3 if i < len(path) - 1 else 5)
-
         h = ship.hull
         if h:
             for rx, ry in h.local_tiles():
                 sx, sy = self.w2s(int(nx) + rx, int(ny) + ry)
                 pygame.draw.rect(self.screen, C['ghost_fill'], (sx + 3, sy + 3, t - 6, t - 6))
                 pygame.draw.rect(self.screen, C['ghost'],      (sx + 3, sy + 3, t - 6, t - 6), 1)
-            gcx, gcy = nx + h.w / 2, ny + h.h / 2
-            gsx, gsy = self.w2s(gcx, gcy)
+            gsx, gsy = self.w2s(nx + h.w / 2, ny + h.h / 2)
             grad = math.radians(na)
             gex  = gsx + int(math.cos(grad) * t * 1.5)
             gey  = gsy + int(math.sin(grad) * t * 1.5)
             pygame.draw.line(self.screen, C['ghost'], (gsx, gsy), (gex, gey), 1)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Combate
-    # ═══════════════════════════════════════════════════════════════════════════
-
     def draw_mortar_range(self, ship: Ship):
-        if not ship.has_mortar():
-            return
+        if not ship.has_mortar(): return
         cx, cy   = ship.center()
         scx, scy = self.w2s(cx, cy)
         r_pix    = ship.mortar_range() * self.tile
@@ -333,8 +256,7 @@ class Renderer:
 
     def draw_crosshair(self):
         mx, my = pygame.mouse.get_pos()
-        if not self._in_vp(mx, my):
-            return
+        if not self._in_vp(mx, my): return
         tx, ty = self.g.s2w(mx, my)
         sx, sy = self.w2s(int(tx), int(ty))
         t = self.tile
@@ -352,9 +274,52 @@ class Renderer:
             p.draw(self.screen)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # HUD
+    # Tooltip de módulo (hover no barco)
     # ═══════════════════════════════════════════════════════════════════════════
+    def draw_tooltip(self, mod, mx, my):
+        """Janela flutuante com info do módulo e seu próximo upgrade."""
+        g    = self.g
+        surf = self.screen
+        font = g.font_sm
+        xs   = g.font_xs
 
+        up_key  = UPGRADE_TREE.get(mod.type)
+        up_def  = MODULE_DEFS[up_key] if up_key else None
+
+        lines = [
+            (mod.name,           C['highlight'], font),
+            (mod.type_label if hasattr(mod, 'type_label') else MODULE_DEFS[mod.type]['desc'],
+             C['text'], xs),
+            (f"HP: {mod.hp}/{mod.max_hp}", C['text_dim'], xs),
+        ]
+        if up_def:
+            lines.append(("", C['text_dim'], xs))
+            lines.append((f"▲ Upgrade: {up_def['name']}",  C['p1'], xs))
+            lines.append((f"  Custo: ${up_def['cost']}",   C['money'], xs))
+            lines.append((f"  {up_def['desc']}",           C['text_dim'], xs))
+        else:
+            lines.append(("  (nível máximo)", C['text_dim'], xs))
+
+        pad = 8
+        line_h = 15
+        w = max(font.size(l[0])[0] for l in lines) + pad * 2
+        h = len(lines) * line_h + pad * 2
+
+        tx = min(mx + 12, self.g.SCREEN_W - w - 4)
+        ty = max(my - h - 4, 4)
+
+        pygame.draw.rect(surf, C['ui_panel'],  (tx, ty, w, h), border_radius=4)
+        pygame.draw.rect(surf, C['ui_border'], (tx, ty, w, h), 1, border_radius=4)
+
+        cy = ty + pad
+        for text, color, f in lines:
+            if text:
+                surf.blit(f.render(text, True, color), (tx + pad, cy))
+            cy += line_h
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # HUD — sidebar e bottom
+    # ═══════════════════════════════════════════════════════════════════════════
     def draw_sidebar(self):
         g    = self.g
         x0   = self._vp_w()
@@ -367,13 +332,16 @@ class Renderer:
 
         def line(text, color=None, font=None, indent=0):
             nonlocal y
-            s = (font or g.font_sm).render(text, True, color or C['text'])
+            col = color or C['text']
+            f   = font  or g.font_sm
+            s   = f.render(text, True, col)
             surf.blit(s, (x0 + 12 + indent, y))
-            y += s.get_height() + 2
+            y  += s.get_height() + 2
 
         def sep():
             nonlocal y
-            pygame.draw.line(surf, C['ui_border'], (x0 + 6, y + 3), (x0 + SIDEBAR_W - 6, y + 3))
+            pygame.draw.line(surf, C['ui_border'],
+                             (x0 + 6, y + 3), (x0 + SIDEBAR_W - 6, y + 3))
             y += 9
 
         ship = g.ships[g.turn]
@@ -399,7 +367,7 @@ class Renderer:
             line(f"↑ ↓  Vel: {g.speed}/{ship.max_speed}",  indent=6)
             line(f"     Rumo: {ship.angle:.0f}°",           indent=6)
             line("ENTER Confirmar", C['highlight'], indent=6)
-            line("Scroll/Z/X Zoom", C['text_dim'], indent=6)
+            line("Scroll/Z/X Zoom", C['text_dim'],  indent=6)
 
         elif g.phase == 'action':
             line("MORTEIRO", C['text_dim'])
@@ -413,7 +381,6 @@ class Renderer:
             return
 
         sep()
-
         line("MÓDULOS", C['text_dim'])
         for m in ship.modules:
             if m.type == 'hull':
@@ -453,7 +420,8 @@ class Renderer:
 
         def sep():
             nonlocal y
-            pygame.draw.line(surf, C['ui_border'], (x0 + 6, y + 3), (x0 + SIDEBAR_W - 6, y + 3))
+            pygame.draw.line(surf, C['ui_border'],
+                             (x0 + 6, y + 3), (x0 + SIDEBAR_W - 6, y + 3))
             y += 8
 
         sep()
@@ -466,18 +434,15 @@ class Renderer:
         for action, mod_type, name, cost, can, desc in items[:6]:
             rect = pygame.Rect(x0 + 12, y, BW, BH)
             hov  = rect.collidepoint(mouse)
-            if not can:
-                bg = C['btn_dis']
-            elif action == 'hull_expand':
-                bg = (0, 110, 160) if hov else (0, 80, 120)
-            else:
-                bg = C['btn_buy_h'] if hov else C['btn_buy']
+            if not can:          bg = C['btn_dis']
+            elif action == 'hull_expand': bg = (0, 80, 120) if not hov else (0, 110, 160)
+            elif hov:            bg = C['btn_buy_h']
+            else:                bg = C['btn_buy']
             pygame.draw.rect(surf, bg, rect, border_radius=4)
             pygame.draw.rect(surf, C['ui_border'], rect, 1, border_radius=4)
-
             tc = C['text'] if can else C['text_dim']
             surf.blit(g.font_sm.render(f"{name[:18]} ${cost}", True, tc), (x0 + 16, y + 4))
-            surf.blit(g.font_xs.render(desc[:32], True, C['text_dim']),   (x0 + 16, y + 20))
+            surf.blit(g.font_xs.render(desc[:32], True, C['text_dim']), (x0 + 16, y + 20))
             g._shop_rects.append((rect, action, mod_type))
             y += BH + 4
 
@@ -503,8 +468,8 @@ class Renderer:
         pygame.draw.line(surf, C['ui_border'], (0, y0), (self._vp_w(), y0), 2)
 
         for i, ship in enumerate(g.ships):
-            c    = C['p1'] if i == 0 else C['p2']
-            h    = ship.hull
+            c   = C['p1'] if i == 0 else C['p2']
+            h   = ship.hull
             hp_r = h.hp / h.max_hp if (h and h.max_hp > 0) else 0
             lbl  = f"J{i+1} Casco {h.hp}/{h.max_hp}" if (h and not h.destroyed) else f"J{i+1} AFUNDOU"
             surf.blit(g.font_md.render(lbl, True, c), (12 + i * 250, y0 + 6))
@@ -525,7 +490,7 @@ class Renderer:
         hint = {
             'move'  : "← → Leme   ↑ ↓ Vel   ENTER Mover   Scroll/Z/X Zoom",
             'action': "Mouse = Mirar   Click = Fogo   SPACE = Pular",
-            'shop'  : "Clique = Comprar/Expandir   ENTER = Pular loja",
+            'shop'  : "Clique = Comprar/Upgrade   ENTER = Pular loja   (Hover no barco = info módulo)",
             'end'   : "R = Menu",
         }.get(g.phase, "")
         hs = g.font_sm.render(hint, True, C['text_dim'])

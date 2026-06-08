@@ -1,4 +1,4 @@
-# entities.py — Módulos, barcos e NPCs
+# entities.py
 
 import math
 import random
@@ -10,7 +10,7 @@ def lerp_color(a, b, t):
 
 
 class Module:
-    def __init__(self, mod_type, rx=None, ry=None):
+    def __init__(self, mod_type: str, rx=None, ry=None):
         d = MODULE_DEFS[mod_type]
         self.type      = mod_type
         self.name      = d['name']
@@ -21,15 +21,16 @@ class Module:
         self.color_key = d['color']
         self.rx        = d['rx'] if rx is None else rx
         self.ry        = d['ry'] if ry is None else ry
-
-    def local_tiles(self):
-        return [(self.rx + dx, self.ry + dy)
-                for dx in range(self.w)
-                for dy in range(self.h)]
+        self.rotated   = False
 
     @property
-    def destroyed(self):
-        return self.hp <= 0
+    def current_w(self): return self.h if self.rotated else self.w
+
+    @property
+    def current_h(self): return self.w if self.rotated else self.h
+
+    @property
+    def destroyed(self): return self.hp <= 0
 
     @property
     def color(self):
@@ -40,18 +41,22 @@ class Module:
     def damage(self, amount=1):
         self.hp = max(0, self.hp - amount)
 
+    def local_tiles(self):
+        return [(self.rx + dx, self.ry + dy)
+                for dx in range(self.current_w)
+                for dy in range(self.current_h)]
+
 
 class Ship:
     def __init__(self, gx, gy, angle, pid):
-        self.gx      = float(gx)
-        self.gy      = float(gy)
-        self.angle   = float(angle)
-        self.pid     = pid
-        self.modules : list[Module] = []
-        self.money   = 200
+        self.gx         = float(gx)
+        self.gy         = float(gy)
+        self.angle      = float(angle)
+        self.pid        = pid
+        self.modules    : list[Module] = []
+        self.money      = 200
+        self._base_fog  = FOG_RADIUS_BASE
         self.hull_level = 0
-
-    # ── Atalhos de módulo ────────────────────────────────────────────────────
 
     def _mod(self, t):
         return next((m for m in self.modules if m.type == t and not m.destroyed), None)
@@ -72,24 +77,23 @@ class Ship:
     def has_engine(self):
         for t in ('engine_thermo', 'engine_nuclear', 'engine'):
             m = self._mod(t)
-            if m:
-                return m
+            if m: return m
         return None
 
     @property
     def max_speed(self):
         e = self.has_engine()
-        if e is None:            return 2
-        if e.type == 'engine_thermo':   return 8
-        if e.type == 'engine_nuclear':  return 6
+        if e is None:             return 2
+        if e.type == 'engine_thermo':  return 8
+        if e.type == 'engine_nuclear': return 6
         return 4
 
     @property
     def noise_level(self):
         e = self.has_engine()
-        if e is None:                   return 0.3
-        if e.type == 'engine_thermo':   return 0.0
-        if e.type == 'engine_nuclear':  return 0.4
+        if e is None:              return 0.3
+        if e.type == 'engine_thermo':  return 0.0
+        if e.type == 'engine_nuclear': return 0.4
         return 0.7
 
     @property
@@ -98,13 +102,12 @@ class Ship:
         return e is not None and e.type == 'engine_thermo'
 
     def fog_radius(self):
-        return FOG_RADIUS_BASE + (2 if self._mod('radar') else 0)
+        return self._base_fog + (2 if self._mod('radar') else 0)
 
     def has_mortar(self):
         for t in ('mortar_heavy', 'mortar'):
             m = self._mod(t)
-            if m:
-                return m
+            if m: return m
         return None
 
     def mortar_range(self):
@@ -123,40 +126,36 @@ class Ship:
     def has_armor(self):
         return self._mod('armor') is not None
 
-    # ── Geometria ────────────────────────────────────────────────────────────
-
     def center(self):
         h = self.hull
-        if h:
-            return self.gx + h.w / 2, self.gy + h.h / 2
+        if h: return self.gx + h.w / 2, self.gy + h.h / 2
         return self.gx + 1.5, self.gy + 1.0
 
     def world_tiles(self):
         ox, oy = int(self.gx), int(self.gy)
-        tiles = set()
+        result = []
         for m in self.modules:
             if not m.destroyed:
-                for rx, ry in m.local_tiles():
-                    tiles.add((ox + rx, oy + ry))
-        return list(tiles)
+                for (rx, ry) in m.local_tiles():
+                    result.append((ox + rx, oy + ry))
+        return list(set(result))
 
     def take_damage_at(self, wx, wy, amount=1):
         ox, oy = int(self.gx), int(self.gy)
-        # Procura módulo não-casco primeiro
+        hit_mod = None
         for m in self.modules:
             if m.destroyed or m.type == 'hull':
                 continue
             if any(ox + rx == wx and oy + ry == wy for rx, ry in m.local_tiles()):
-                m.damage(amount)
-                return True
-        # Fallback: casco
-        h = self.hull
-        if h and any(ox + rx == wx and oy + ry == wy for rx, ry in h.local_tiles()):
-            h.damage(amount)
+                hit_mod = m
+                break
+        if hit_mod is None and self.hull:
+            if any(ox + rx == wx and oy + ry == wy for rx, ry in self.hull.local_tiles()):
+                hit_mod = self.hull
+        if hit_mod:
+            hit_mod.damage(amount)
             return True
         return False
-
-    # ── Movimento ────────────────────────────────────────────────────────────
 
     def preview_move(self, steering, speed):
         from constants import GRID_SIZE as GS
@@ -178,88 +177,66 @@ class Ship:
     def apply_move(self, steering, speed):
         self.gx, self.gy, self.angle, _ = self.preview_move(steering, speed)
 
-    # ── Loja ─────────────────────────────────────────────────────────────────
-
     def available_purchases(self):
         owned = {m.type for m in self.modules}
         items = []
 
-        # Expansão de casco
         if self.hull_level < len(HULL_UPGRADES):
             nw, nh, cost = HULL_UPGRADES[self.hull_level]
             items.append(('hull_expand', 'hull', f'Expandir Casco {nw}×{nh}', cost,
                           self.money >= cost, f'Cresce o casco para {nw}×{nh}'))
 
-        # Upgrades de módulos existentes
-        for base_type, up_type in UPGRADE_TREE.items():
-            if base_type in owned and up_type not in owned:
-                ud = MODULE_DEFS[up_type]
-                items.append(('upgrade', base_type, ud['name'], ud['cost'],
-                              self.money >= ud['cost'], ud['desc']))
+        for t, d in MODULE_DEFS.items():
+            if t in ('hull', 'engine', 'engine_nuclear', 'engine_thermo', 'mortar_heavy'):
+                continue
+            if t in owned:
+                continue
+            items.append(('buy', t, d['name'], d['cost'], self.money >= d['cost'], d['desc']))
 
-        # Reparos
+        for t, up in UPGRADE_TREE.items():
+            if t in owned and up not in owned:
+                ud = MODULE_DEFS[up]
+                items.append(('upgrade', t, ud['name'], ud['cost'], self.money >= ud['cost'], ud['desc']))
+
         for m in self.modules:
             if 0 < m.hp < m.max_hp:
-                items.append(('repair', m.type, f'Reparar {m.name}', 30,
-                              self.money >= 30, 'Restaura 1HP'))
+                items.append(('repair', m.type, f'Reparar {m.name}', 30, self.money >= 30, 'Restaura 1HP'))
 
         return items
-
-    def can_afford(self, action, mod_type):
-        if action == 'upgrade':
-            return self.money >= MODULE_DEFS[UPGRADE_TREE[mod_type]]['cost']
-        if action == 'repair':
-            return self.money >= 30
-        if action == 'hull_expand':
-            return self.hull_level < len(HULL_UPGRADES) and \
-                   self.money >= HULL_UPGRADES[self.hull_level][2]
-        return False
 
     def apply_purchase(self, action, mod_type):
         if action == 'upgrade':
             up = UPGRADE_TREE.get(mod_type)
-            if not up:
-                return
-            old = next((m for m in self.modules if m.type == mod_type), None)
-            if old:
-                new_m = Module(up, rx=old.rx, ry=old.ry)
+            if not up: return
+            old_m = next((x for x in self.modules if x.type == mod_type), None)
+            if old_m:
+                new_m = Module(up, rx=old_m.rx, ry=old_m.ry)
+                new_m.rotated = old_m.rotated
                 self.money -= MODULE_DEFS[up]['cost']
-                self.modules.remove(old)
+                self.modules.remove(old_m)
                 self.modules.append(new_m)
 
         elif action == 'repair':
-            m = next((m for m in self.modules if m.type == mod_type), None)
+            m = next((x for x in self.modules if x.type == mod_type), None)
             if m:
                 self.money -= 30
                 m.hp = min(m.max_hp, m.hp + 1)
 
         elif action == 'hull_expand':
-            if not self.can_afford('hull_expand', 'hull'):
-                return
+            if self.hull_level >= len(HULL_UPGRADES): return
             nw, nh, cost = HULL_UPGRADES[self.hull_level]
+            if self.money < cost: return
             self.money -= cost
             h = self.hull
             if h:
-                old_max = h.max_hp
+                old_max_hp = h.max_hp
                 h.w, h.h = nw, nh
                 h.max_hp = nw * nh
-                h.hp = min(h.max_hp, h.hp + (h.max_hp - old_max))
+                h.hp = min(h.max_hp, h.hp + (h.max_hp - old_max_hp))
             self.hull_level += 1
 
-    # ── Tooltip de upgrade ────────────────────────────────────────────────────
 
-    def upgrade_tooltip(self, mod_type):
-        """Retorna (nome_upgrade, custo, desc) se houver upgrade disponível, ou None."""
-        up = UPGRADE_TREE.get(mod_type)
-        if up and not any(m.type == up for m in self.modules):
-            d = MODULE_DEFS[up]
-            return d['name'], d['cost'], d['desc']
-        return None
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# NPCs
-# ═════════════════════════════════════════════════════════════════════════════
+# ─────────────────────── NPCs ──────────────────────────────────────────────────
 
 class NPC:
     def __init__(self, gx, gy):
@@ -269,25 +246,17 @@ class NPC:
         self.hp    = 1
         self.angle = random.uniform(0, 360)
 
-    def center(self):
-        return self.gx, self.gy
-
-    def world_tiles(self):
-        return [(int(self.gx), int(self.gy))]
+    def center(self):      return self.gx, self.gy
+    def world_tiles(self): return [(int(self.gx), int(self.gy))]
+    def money_reward(self): return 50
+    def update(self): pass
 
     def take_damage_at(self, wx, wy, amount=1):
         if int(self.gx) == wx and int(self.gy) == wy:
             self.hp -= amount
-            if self.hp <= 0:
-                self.alive = False
+            if self.hp <= 0: self.alive = False
             return True
         return False
-
-    def money_reward(self):
-        return 50
-
-    def update(self):
-        pass
 
 
 class Fish(NPC):
@@ -310,11 +279,11 @@ class Fish(NPC):
             nx = self.gx + random.randint(-radius, radius)
             ny = self.gy + random.randint(-radius, radius)
             if 0.5 <= nx <= GS - 1.5 and 0.5 <= ny <= GS - 1.5:
-                dist = math.hypot(nx - self.gx, ny - self.gy)
+                self.target_x = float(int(nx)) + 0.5
+                self.target_y = float(int(ny)) + 0.5
+                dist = math.hypot(self.target_x - self.gx, self.target_y - self.gy)
                 if dist > 0.5:
-                    self.target_x = float(int(nx)) + 0.5
-                    self.target_y = float(int(ny)) + 0.5
-                    self.angle = math.degrees(math.atan2(ny - self.gy, nx - self.gx))
+                    self.angle = math.degrees(math.atan2(self.target_y - self.gy, self.target_x - self.gx))
                     self.moving = True
                     return
         self.moving  = False
@@ -322,8 +291,7 @@ class Fish(NPC):
         self.pause_t = random.randint(*self.PAUSE_FRAMES)
 
     def update(self):
-        if not self.alive:
-            return
+        if not self.alive: return
         if self.moving:
             dx = self.target_x - self.gx
             dy = self.target_y - self.gy
@@ -341,9 +309,6 @@ class Fish(NPC):
             if self.timer >= self.pause_t:
                 self._pick_target()
 
-    def money_reward(self):
-        return 50
-
     def world_tiles(self):
         return [(round(self.gx - 0.5), round(self.gy - 0.5))]
 
@@ -351,8 +316,7 @@ class Fish(NPC):
         tx, ty = round(self.gx - 0.5), round(self.gy - 0.5)
         if tx == wx and ty == wy:
             self.hp -= amount
-            if self.hp <= 0:
-                self.alive = False
+            if self.hp <= 0: self.alive = False
             return True
         return False
 
@@ -365,17 +329,14 @@ class NPCShip(NPC):
         self.timer  = 0
 
     def update(self, map_grid):
-        if not self.alive:
-            return
+        if not self.alive: return
         GS = len(map_grid)
         self.timer += 1
         if self.timer % 90 == 0:
             self.angle += random.uniform(-45, 45)
-
         rad = math.radians(self.angle)
         for d in range(1, 5):
-            fx = int(self.gx + math.cos(rad) * d)
-            fy = int(self.gy + math.sin(rad) * d)
+            fx, fy = int(self.gx + math.cos(rad) * d), int(self.gy + math.sin(rad) * d)
             if 0 <= fx < GS and 0 <= fy < GS:
                 if map_grid[fy][fx] != 'water':
                     self.angle += random.choice([25, -25, 40, -40])
@@ -383,20 +344,20 @@ class NPCShip(NPC):
             else:
                 self.angle += random.choice([30, -30])
                 break
-
         rad = math.radians(self.angle)
         self.gx = max(1.0, min(GS - 2.0, self.gx + math.cos(rad) * self.speed))
         self.gy = max(1.0, min(GS - 2.0, self.gy + math.sin(rad) * self.speed))
 
-    def money_reward(self):
-        return 150
+    def money_reward(self): return 150
 
+
+# ─────────────────────── Partículas ────────────────────────────────────────────
 
 class Particle:
     def __init__(self, sx, sy):
         a   = random.uniform(0, math.tau)
         spd = random.uniform(1.5, 5.0)
-        self.x, self.y   = float(sx), float(sy)
+        self.x,  self.y  = float(sx), float(sy)
         self.vx, self.vy = math.cos(a) * spd, math.sin(a) * spd
         self.life = random.randint(18, 40)
         self.col  = random.choice([C['exp_a'], C['exp_b'], C['exp_c']])

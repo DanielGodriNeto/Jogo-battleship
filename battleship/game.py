@@ -1,4 +1,4 @@
-# game.py — Classe principal do jogo
+# game.py
 
 import pygame
 import sys
@@ -7,7 +7,7 @@ import random
 
 from constants import (
     BASE_TILE, VP_PIXELS_W, VP_PIXELS_H, SIDEBAR_W, BOTTOM_H,
-    MAP_SIZES, DEFAULT_MAP, FPS, C, MODULE_DEFS, HULL_UPGRADES
+    MAP_SIZES, DEFAULT_MAP, FOG_RADIUS_BASE, FPS, C, MODULE_DEFS, HULL_UPGRADES
 )
 from entities import Ship, Fish, NPCShip, Module, Particle
 from renderer import Renderer
@@ -19,7 +19,7 @@ class Game:
         self.SCREEN_W = VP_PIXELS_W + SIDEBAR_W
         self.SCREEN_H = VP_PIXELS_H + BOTTOM_H
         self.screen   = pygame.display.set_mode((self.SCREEN_W, self.SCREEN_H))
-        pygame.display.set_caption("Batalha Naval 2  |  v0.3")
+        pygame.display.set_caption("Batalha Naval 2  |  v0.4")
         self.clock    = pygame.time.Clock()
 
         self.font_xs = pygame.font.SysFont('consolas', 11)
@@ -45,20 +45,23 @@ class Game:
         self.grid_size = MAP_SIZES[DEFAULT_MAP]
         self.map_grid  = [['water'] * self.grid_size for _ in range(self.grid_size)]
         self.radar     = Radar()
+
         self._menu_buttons = []
         self._shop_rects   = []
+        self._ghost        = None
         self.cam_x = 0.0
         self.cam_y = 0.0
         self.steering = 0.0
         self.speed    = 2
 
-    # ─────────────────────── Geração de ilhas ─────────────────────────────────
+        # Tooltip: (módulo, posição na tela) ou None
+        self.tooltip : tuple | None = None
 
+    # ─────────────────────── Geração de ilhas ──────────────────────────────────
     def generate_islands(self):
         gs = self.grid_size
         self.map_grid = [['water'] * gs for _ in range(gs)]
         margin = 6
-
         protected = set()
         for px, py in [(4, 4), (gs - 8, gs - 8)]:
             for dx in range(-6, 12):
@@ -67,11 +70,10 @@ class Game:
 
         max_radius  = max(3, min(7, gs // 10))
         num_islands = max(2, gs // 12)
-        placed = 0
+        placed = attempts = 0
 
-        for _ in range(num_islands * 20):
-            if placed >= num_islands:
-                break
+        while placed < num_islands and attempts < num_islands * 20:
+            attempts += 1
             radius = random.randint(2, max_radius)
             cx = random.randint(margin + radius, gs - margin - radius - 1)
             cy = random.randint(margin + radius, gs - margin - radius - 1)
@@ -79,7 +81,6 @@ class Game:
                    for dx in range(-radius - 2, radius + 3)
                    for dy in range(-radius - 2, radius + 3)):
                 continue
-
             for dx in range(-radius - 1, radius + 2):
                 for dy in range(-radius - 1, radius + 2):
                     gx, gy = cx + dx, cy + dy
@@ -91,8 +92,7 @@ class Game:
                     elif dist < radius:        self.map_grid[gy][gx] = 'sand'
             placed += 1
 
-    # ─────────────────────── Init partida ─────────────────────────────────────
-
+    # ─────────────────────── Init partida ──────────────────────────────────────
     def _init_game(self, map_key=DEFAULT_MAP):
         self.grid_size = MAP_SIZES[map_key]
         self.tile, self.zoom = BASE_TILE, 1.0
@@ -115,37 +115,37 @@ class Game:
         for i in range(fish_count):
             self.npcs.append(Fish(*water_tiles[i]))
         for i in range(npc_count):
-            self.npcs.append(NPCShip(*water_tiles[fish_count + i]))
+            self.npcs.append(NPCShip(*map(float, water_tiles[fish_count + i])))
 
-        self.turn          = 0
-        self.turn_absolute = 0
-        self.phase         = 'move'
-        self.winner        = None
-        self.steering      = 0.0
-        self.speed         = 2
-        self.particles     = []
-        self.messages      = []
-        self.radar         = Radar()
+        self.turn = self.turn_absolute = 0
+        self.phase    = 'move'
+        self.winner   = None
+        self.steering = 0.0
+        self.speed    = 2
+        self.particles = []
+        self.messages  = []
+        self.radar     = Radar()
+        self.tooltip   = None
 
-        self._ghost = self.ships[0].preview_move(0, 2)
+        self._refresh_ghost()
         self._center_cam()
         self._log("╔ Vez do Jogador 1 — Mover barco ╗")
         self.state = 'play'
 
     def _build_ship(self, gx, gy, angle, pid) -> Ship:
-        """Cria um navio com todos os módulos já posicionados no casco."""
+        """Cria navio já com todos os módulos instalados em posições fixas."""
         s = Ship(gx, gy, angle, pid)
-        # Módulos: hull 3×2, engine 2×1, mortar 1×1, armor 1×1, research 2×1, radar 1×1
-        s.modules.append(Module('hull'))       # rx=0, ry=0  (3×2)
-        s.modules.append(Module('engine'))     # rx=0, ry=1  (2×1) — linha de baixo esq
-        s.modules.append(Module('mortar'))     # rx=2, ry=0  (1×1) — canto dir cima
-        s.modules.append(Module('armor',   rx=0, ry=0))   # canto esq cima
-        s.modules.append(Module('research', rx=0, ry=1))  # baixo esq (compartilha com engine mas ok visivelmente)
-        s.modules.append(Module('radar',   rx=2, ry=1))   # canto dir baixo
+        # Linha 0 do casco: armor (col 1), mortar (col 2)
+        # Linha 1 do casco: engine (cols 0-1), radar (col 2)
+        s.modules.append(Module('hull'))
+        s.modules.append(Module('engine',   rx=0, ry=1))
+        s.modules.append(Module('mortar',   rx=2, ry=0))
+        s.modules.append(Module('armor',    rx=1, ry=0))
+        s.modules.append(Module('research', rx=0, ry=0))
+        s.modules.append(Module('radar',    rx=2, ry=1))
         return s
 
-    # ─────────────────────── Zoom & Câmera ────────────────────────────────────
-
+    # ─────────────────────── Zoom / câmera ─────────────────────────────────────
     def _set_zoom(self, factor):
         self.zoom = max(0.4, min(2.5, factor))
         self.tile = max(6, int(BASE_TILE * self.zoom))
@@ -155,13 +155,12 @@ class Game:
     def _vp_h(self): return VP_PIXELS_H
 
     def _center_cam(self):
-        if not self.ships:
-            return
+        if not self.ships: return
         cx, cy = self.ships[self.turn].center()
-        vis_cols = self._vp_w() / self.tile
-        vis_rows = self._vp_h() / self.tile
-        self.cam_x = max(0.0, min(self.grid_size - vis_cols, cx - vis_cols / 2))
-        self.cam_y = max(0.0, min(self.grid_size - vis_rows, cy - vis_rows / 2))
+        vc = self._vp_w() / self.tile
+        vr = self._vp_h() / self.tile
+        self.cam_x = max(0.0, min(self.grid_size - vc, cx - vc / 2))
+        self.cam_y = max(0.0, min(self.grid_size - vr, cy - vr / 2))
 
     def w2s(self, gx, gy):
         return (int((gx - self.cam_x) * self.tile),
@@ -174,18 +173,15 @@ class Game:
     def _in_vp(self, sx, sy):
         return 0 <= sx < self._vp_w() and 0 <= sy < self._vp_h()
 
-    # ─────────────────────── Log ──────────────────────────────────────────────
-
+    # ─────────────────────── Log ───────────────────────────────────────────────
     def _log(self, msg):
         self.messages.append(msg)
         if len(self.messages) > 7:
             self.messages.pop(0)
 
-    # ─────────────────────── Visibilidade ─────────────────────────────────────
-
+    # ─────────────────────── Visibilidade ──────────────────────────────────────
     def _visible_tiles(self) -> set:
-        if not self.ships:
-            return set()
+        if not self.ships: return set()
         cx, cy = self.ships[self.turn].center()
         r  = self.ships[self.turn].fog_radius()
         r2 = r * r
@@ -195,14 +191,11 @@ class Game:
                 for dy in range(-r - 1, r + 2)
                 if dx * dx + dy * dy <= r2}
 
-    # ─────────────────────── Explosão ─────────────────────────────────────────
-
+    # ─────────────────────── Explosão / colisão ────────────────────────────────
     def _explode_at_tile(self, wx, wy):
         sx, sy = self.w2s(wx + 0.5, wy + 0.5)
         for _ in range(28):
             self.particles.append(Particle(sx, sy))
-
-    # ─────────────────────── Colisão ──────────────────────────────────────────
 
     def _check_island_collision(self, ship: Ship):
         hit_tiles = set()
@@ -212,8 +205,7 @@ class Game:
                     hit_tiles.add((wx, wy))
             else:
                 hit_tiles.add((wx, wy))
-        if not hit_tiles:
-            return
+        if not hit_tiles: return
         self._log("⚠ Encalhou numa ilha!")
         for wx, wy in hit_tiles:
             ship.take_damage_at(wx, wy)
@@ -221,8 +213,7 @@ class Game:
         self._check_win()
 
     def _check_collision(self):
-        t0 = set(self.ships[0].world_tiles())
-        t1 = set(self.ships[1].world_tiles())
+        t0, t1 = set(self.ships[0].world_tiles()), set(self.ships[1].world_tiles())
         overlap = t0 & t1
         if overlap:
             self._log("⚠ COLISÃO!")
@@ -232,19 +223,16 @@ class Game:
                 self._explode_at_tile(wx, wy)
             self._check_win()
 
-    # ─────────────────────── Mecânica ─────────────────────────────────────────
-
+    # ─────────────────────── Mecânica principal ────────────────────────────────
     def _execute_move(self):
         ship = self.ships[self.turn]
         ship.apply_move(self.steering, self.speed)
         self._center_cam()
         self._log(f"J{self.turn+1} navegou! Rumo {ship.angle:.0f}°, vel {self.speed}")
         self._check_island_collision(ship)
-        if self.winner:
-            return
+        if self.winner: return
         self._check_collision()
-        if self.winner:
-            return
+        if self.winner: return
         if ship.has_mortar():
             self.phase = 'action'
             self._log(f"J{self.turn+1} — Ataque! Clique no alvo (SPACE=pular)")
@@ -257,28 +245,22 @@ class Game:
         shooter = self.ships[self.turn]
         target  = self.ships[1 - self.turn]
         cx, cy  = shooter.center()
-
         if math.hypot(tx - cx, ty - cy) > shooter.mortar_range():
-            self._log("Fora do alcance!")
-            return
-
+            self._log("Fora do alcance!"); return
         for npc in self.npcs:
             if npc.alive and npc.take_damage_at(tx, ty):
-                mult   = 1.5 if shooter.has_research() else 1.0
-                reward = int(npc.money_reward() * mult)
+                reward = int(npc.money_reward() * (1.5 if shooter.has_research() else 1.0))
                 shooter.money += reward
                 self._log(f"NPC abatido! +${reward}")
                 self._explode_at_tile(tx, ty)
                 self._open_shop()
                 return
-
         dmg = shooter.mortar_damage()
         if target.take_damage_at(tx, ty, dmg):
             self._log(f"Acerto! -{dmg}HP")
             self._explode_at_tile(tx, ty)
             self._check_win()
-            if not self.winner:
-                self._open_shop()
+            if not self.winner: self._open_shop()
         else:
             self._log("Errou!")
             self._open_shop()
@@ -295,12 +277,13 @@ class Game:
         self._log(f"J{self.turn+1} — Loja. ENTER=pular")
 
     def _end_turn(self):
-        self.turn          = 1 - self.turn
+        self.turn = 1 - self.turn
         self.turn_absolute += 1
-        self.phase         = 'move'
-        self.steering      = 0.0
-        self.speed         = 2
-        self._ghost = self.ships[self.turn].preview_move(0, 2)
+        self.phase    = 'move'
+        self.steering = 0.0
+        self.speed    = 2
+        self.tooltip  = None
+        self._refresh_ghost()
         self._center_cam()
         self._log(f"╔ Vez do Jogador {self.turn+1} — Mover barco ╗")
 
@@ -308,20 +291,32 @@ class Game:
         if self.ships:
             self._ghost = self.ships[self.turn].preview_move(self.steering, self.speed)
 
-    # ─────────────────────── NPCs ─────────────────────────────────────────────
-
-    def _update_npcs(self):
-        if self.phase == 'action':
+    # ─────────────────────── Tooltip: hover nos módulos do barco ───────────────
+    def _update_tooltip(self, mx, my):
+        """Verifica se o mouse está sobre um módulo do navio atual e guarda o tooltip."""
+        if not self._in_vp(mx, my):
+            self.tooltip = None
             return
+        ship = self.ships[self.turn]
+        ox, oy = int(ship.gx), int(ship.gy)
+        wx, wy = int(self.s2w(mx, my)[0]), int(self.s2w(mx, my)[1])
+        for m in ship.modules:
+            if m.type == 'hull': continue
+            for rx, ry in m.local_tiles():
+                if ox + rx == wx and oy + ry == wy:
+                    self.tooltip = (m, mx, my)
+                    return
+        self.tooltip = None
+
+    # ─────────────────────── NPCs ──────────────────────────────────────────────
+    def _update_npcs(self):
+        if self.phase == 'action': return
         for npc in self.npcs:
-            if isinstance(npc, NPCShip):
-                npc.update(self.map_grid)
-            else:
-                npc.update()
+            if isinstance(npc, NPCShip): npc.update(self.map_grid)
+            else:                        npc.update()
         self.npcs = [n for n in self.npcs if n.alive]
 
-    # ─────────────────────── Eventos ──────────────────────────────────────────
-
+    # ─────────────────────── Eventos ───────────────────────────────────────────
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
@@ -331,50 +326,36 @@ class Game:
                 if e.type == pygame.MOUSEBUTTONDOWN:
                     for rect, action in self._menu_buttons:
                         if rect.collidepoint(e.pos):
-                            if action == 'start':
-                                self._init_game(self.map_choice)
-                            elif action in MAP_SIZES:
-                                self.map_choice = action
+                            if action == 'start': self._init_game(self.map_choice)
+                            elif action in MAP_SIZES: self.map_choice = action
                 return
 
             if e.type == pygame.MOUSEWHEEL:
                 self._set_zoom(self.zoom + e.y * 0.12)
                 continue
 
+            if e.type == pygame.MOUSEMOTION and self.state == 'play' and not self.winner:
+                self._update_tooltip(*e.pos)
+
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_r and self.phase == 'end':
                     self.state = 'menu'; return
-                if self.winner:
-                    continue
+                if self.winner: continue
 
                 if self.phase == 'move':
-                    if e.key == pygame.K_LEFT:
-                        self.steering = max(-90.0, self.steering - 15)
-                        self._refresh_ghost()
-                    elif e.key == pygame.K_RIGHT:
-                        self.steering = min(90.0, self.steering + 15)
-                        self._refresh_ghost()
-                    elif e.key == pygame.K_UP:
-                        self.speed = min(self.ships[self.turn].max_speed, self.speed + 1)
-                        self._refresh_ghost()
-                    elif e.key == pygame.K_DOWN:
-                        self.speed = max(1, self.speed - 1)
-                        self._refresh_ghost()
-                    elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        self._execute_move()
-                    elif e.key == pygame.K_z:
-                        self._set_zoom(self.zoom + 0.15)
-                    elif e.key == pygame.K_x:
-                        self._set_zoom(self.zoom - 0.15)
+                    if   e.key == pygame.K_LEFT:  self.steering = max(-90.0, self.steering - 15); self._refresh_ghost()
+                    elif e.key == pygame.K_RIGHT: self.steering = min( 90.0, self.steering + 15); self._refresh_ghost()
+                    elif e.key == pygame.K_UP:    self.speed = min(self.ships[self.turn].max_speed, self.speed + 1); self._refresh_ghost()
+                    elif e.key == pygame.K_DOWN:  self.speed = max(1, self.speed - 1); self._refresh_ghost()
+                    elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER): self._execute_move()
+                    elif e.key == pygame.K_z: self._set_zoom(self.zoom + 0.15)
+                    elif e.key == pygame.K_x: self._set_zoom(self.zoom - 0.15)
 
                 elif self.phase == 'action':
                     if e.key in (pygame.K_SPACE, pygame.K_RETURN):
-                        self._log("Ataque pulado.")
-                        self._open_shop()
-                    elif e.key == pygame.K_z:
-                        self._set_zoom(self.zoom + 0.15)
-                    elif e.key == pygame.K_x:
-                        self._set_zoom(self.zoom - 0.15)
+                        self._log("Ataque pulado."); self._open_shop()
+                    elif e.key == pygame.K_z: self._set_zoom(self.zoom + 0.15)
+                    elif e.key == pygame.K_x: self._set_zoom(self.zoom - 0.15)
 
                 elif self.phase == 'shop':
                     if e.key in (pygame.K_RETURN, pygame.K_SPACE):
@@ -391,18 +372,32 @@ class Game:
                     for rect, action, mod_type in self._shop_rects:
                         if rect.collidepoint(mx, my):
                             if action == 'skip':
-                                self._end_turn()
-                                return
+                                self._end_turn(); return
                             ship = self.ships[self.turn]
-                            if ship.can_afford(action, mod_type):
+                            if action == 'hull_expand':
+                                lvl = ship.hull_level
+                                if lvl < len(HULL_UPGRADES) and ship.money >= HULL_UPGRADES[lvl][2]:
+                                    ship.apply_purchase('hull_expand', 'hull')
+                                    self._log(f"Casco expandido para {ship.hull.w}×{ship.hull.h}!")
+                                else:
+                                    self._log("Dinheiro insuficiente!")
+                                return
+                            # Upgrades e reparos
+                            can_afford = False
+                            if action == 'upgrade':
+                                from constants import UPGRADE_TREE
+                                up = UPGRADE_TREE.get(mod_type)
+                                can_afford = up is not None and ship.money >= MODULE_DEFS[up]['cost']
+                            elif action == 'repair':
+                                can_afford = ship.money >= 30
+                            if can_afford:
                                 ship.apply_purchase(action, mod_type)
                                 self._log("Transação concluída.")
                             else:
                                 self._log("Dinheiro insuficiente!")
                             return
 
-    # ─────────────────────── Render ───────────────────────────────────────────
-
+    # ─────────────────────── Render ────────────────────────────────────────────
     def draw(self):
         if self.state == 'menu':
             self.renderer.draw_menu()
@@ -412,7 +407,6 @@ class Game:
         visible = self._visible_tiles()
 
         r.draw_world(visible)
-
         if self.phase == 'move':
             r.draw_ghost(self._ghost, self.ships[self.turn])
         r.draw_ship(self.ships[1 - self.turn], visible)
@@ -428,8 +422,10 @@ class Game:
         r.draw_sidebar()
         r.draw_bottom()
 
-    # ─────────────────────── Loop principal ───────────────────────────────────
+        if self.tooltip:
+            r.draw_tooltip(*self.tooltip)
 
+    # ─────────────────────── Loop principal ────────────────────────────────────
     def run(self):
         while True:
             if self.state == 'play':
