@@ -2,7 +2,7 @@
 
 import math
 import random
-from constants import C, MODULE_DEFS, UPGRADE_TREE, HULL_UPGRADES, FOG_RADIUS_BASE, GRID_SIZE
+from constants import C, MODULE_DEFS, UPGRADE_TREE, FOG_RADIUS_BASE
 
 
 def lerp_color(a, b, t):
@@ -25,10 +25,8 @@ class Module:
 
     @property
     def current_w(self): return self.h if self.rotated else self.w
-
     @property
     def current_h(self): return self.w if self.rotated else self.h
-
     @property
     def destroyed(self): return self.hp <= 0
 
@@ -55,8 +53,8 @@ class Ship:
         self.pid        = pid
         self.modules    : list[Module] = []
         self.money      = 200
-        self._base_fog  = FOG_RADIUS_BASE
-        self.hull_level = 0
+        self._base_fog  = FOG_RADIUS_BASE # Raio base da névoa
+        self.modules.append(Module('hull')) # Inicializa com um casco
 
     def _mod(self, t):
         return next((m for m in self.modules if m.type == t and not m.destroyed), None)
@@ -132,7 +130,7 @@ class Ship:
         return self.gx + 1.5, self.gy + 1.0
 
     def world_tiles(self):
-        ox, oy = int(self.gx), int(self.gy)
+        ox, oy = round(self.gx), round(self.gy)
         result = []
         for m in self.modules:
             if not m.destroyed:
@@ -141,24 +139,19 @@ class Ship:
         return list(set(result))
 
     def take_damage_at(self, wx, wy, amount=1):
-        ox, oy = int(self.gx), int(self.gy)
-        hit_mod = None
-        for m in self.modules:
-            if m.destroyed or m.type == 'hull':
-                continue
+        ox, oy = round(self.gx), round(self.gy)
+        
+        # Prioritiza módulos funcionais, deixa o casco por último
+        targets = [m for m in self.modules if not m.destroyed and m.type != 'hull']
+        if self.hull: targets.append(self.hull)
+
+        for m in targets:
             if any(ox + rx == wx and oy + ry == wy for rx, ry in m.local_tiles()):
-                hit_mod = m
-                break
-        if hit_mod is None and self.hull:
-            if any(ox + rx == wx and oy + ry == wy for rx, ry in self.hull.local_tiles()):
-                hit_mod = self.hull
-        if hit_mod:
-            hit_mod.damage(amount)
-            return True
+                m.damage(amount)
+                return True
         return False
 
-    def preview_move(self, steering, speed):
-        from constants import GRID_SIZE as GS
+    def preview_move(self, steering, speed, grid_size):
         path = []
         x, y = self.gx, self.gy
         steering = max(-45, min(45, steering))
@@ -170,21 +163,16 @@ class Ship:
             path.append((x, y))
         h = self.hull
         bw, bh = (h.w, h.h) if h else (3, 2)
-        nx = max(0.0, min(float(GS - bw), x))
-        ny = max(0.0, min(float(GS - bh), y))
+        nx = max(0.0, min(float(grid_size - bw), x))
+        ny = max(0.0, min(float(grid_size - bh), y))
         return nx, ny, (self.angle + steering) % 360, path
 
-    def apply_move(self, steering, speed):
-        self.gx, self.gy, self.angle, _ = self.preview_move(steering, speed)
+    def apply_move(self, steering, speed, grid_size):
+        self.gx, self.gy, self.angle, _ = self.preview_move(steering, speed, grid_size)
 
     def available_purchases(self):
         owned = {m.type for m in self.modules}
         items = []
-
-        if self.hull_level < len(HULL_UPGRADES):
-            nw, nh, cost = HULL_UPGRADES[self.hull_level]
-            items.append(('hull_expand', 'hull', f'Expandir Casco {nw}×{nh}', cost,
-                          self.money >= cost, f'Cresce o casco para {nw}×{nh}'))
 
         for t, d in MODULE_DEFS.items():
             if t in ('hull', 'engine', 'engine_nuclear', 'engine_thermo', 'mortar_heavy'):
@@ -222,18 +210,12 @@ class Ship:
                 self.money -= 30
                 m.hp = min(m.max_hp, m.hp + 1)
 
-        elif action == 'hull_expand':
-            if self.hull_level >= len(HULL_UPGRADES): return
-            nw, nh, cost = HULL_UPGRADES[self.hull_level]
-            if self.money < cost: return
-            self.money -= cost
-            h = self.hull
-            if h:
-                old_max_hp = h.max_hp
-                h.w, h.h = nw, nh
-                h.max_hp = nw * nh
-                h.hp = min(h.max_hp, h.hp + (h.max_hp - old_max_hp))
-            self.hull_level += 1
+        elif action == 'buy':
+            if mod_type in [m.type for m in self.modules]: return
+            d = MODULE_DEFS[mod_type]
+            if self.money >= d['cost']:
+                self.money -= d['cost']
+                self.modules.append(Module(mod_type))
 
 
 # ─────────────────────── NPCs ──────────────────────────────────────────────────
@@ -272,13 +254,14 @@ class Fish(NPC):
         self.moving   = False
         self._pick_target()
 
-    def _pick_target(self):
-        from constants import GRID_SIZE as GS
+    def _pick_target(self, grid_size=80):
+        # Tenta pegar o tamanho atual se possível, senão usa padrão 80
+        gs = grid_size
         radius = random.randint(2, 5)
         for _ in range(10):
             nx = self.gx + random.randint(-radius, radius)
             ny = self.gy + random.randint(-radius, radius)
-            if 0.5 <= nx <= GS - 1.5 and 0.5 <= ny <= GS - 1.5:
+            if 0.5 <= nx <= gs - 1.5 and 0.5 <= ny <= gs - 1.5:
                 self.target_x = float(int(nx)) + 0.5
                 self.target_y = float(int(ny)) + 0.5
                 dist = math.hypot(self.target_x - self.gx, self.target_y - self.gy)
