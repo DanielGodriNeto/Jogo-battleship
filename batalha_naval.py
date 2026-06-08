@@ -133,12 +133,14 @@ while tamanhoBarco > 0:
         continue # Volta para o início do while, pedindo o mesmo barco de novo
     
     # Se passou em tudo (Limites E Sobreposição), desenha o barco
+    checaRow = rowBarco
+    checaCol = columBarco
     for j in range(tamanhoBarco):
-        tabuleiroJogador[rowBarco] [columBarco] = '■'
+        tabuleiroJogador[checaRow][checaCol] = '■'
         if orientacaoBarco == 'V':
-            rowBarco += 1
+            checaRow += 1
         else:
-            columBarco += 1
+            checaCol += 1
 
     tamanhoBarco -= 1
     os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal
@@ -186,12 +188,14 @@ while tamanhoBarcoPC > 0:
         continue # Volta para o início do while, sorteando o barco de novo
     
     # Se passou em tudo, desenha o barco do PC no tabuleiro secreto dele
+    checaRow = rowBarco
+    checaCol = columBarco
     for j in range(tamanhoBarcoPC):
-        tabuleiroComputador[rowBarco] [columBarco] = '■'
+        tabuleiroComputador[checaRow][checaCol] = '■'
         if orientacaoBarco == 'V':
-            rowBarco += 1
+            checaRow += 1
         else:
-            columBarco += 1
+            checaCol += 1
 
     tamanhoBarcoPC -= 1
 
@@ -255,13 +259,13 @@ while vidaJogador > 0 and vidaPC > 0:
             # Traduz o número da linha de volta para letra (ex: 1 vira 'A') para expor no print
             print(f"O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e ACERTOU um barco seu!")
             tabuleiroFeedbackJogador[tiroRowPC][tiroColumPc] = 'X' 
-            tabuleiroJogador[tiroRowPC][tiroColumPc] = 'X' 
+            tabuleiroJogador[tiroRowPC][tiroColumPc] = 'X' # CORREÇÃO: adicionado = 'X' para desativar o barco atingido
             vidaJogador -= 1
             # Nota: como ele acertou, turnoJogador continua False (vez do PC de novo)
         else:
             print(f"O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e deu ÁGUA!")
             tabuleiroFeedbackJogador[tiroRowPC][tiroColumPc] = 'O' 
-            turnoJogador = True # Passa o turno de volta para o jogador
+            turnoJogador = True # CORREÇÃO: Alterna para True para voltar a ser a vez do Humano
 
         sleep(2.5) # Dá tempo para o jogador ler o que o PC fez antes de limpar a tela
         os.system('cls' if os.name == 'nt' else 'clear')
