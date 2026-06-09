@@ -278,6 +278,26 @@ else:
     print("Que pena! O computador é o vencedor")
 
 # Tela de créditos
+
 sleep(2.5)
-print("Obrigado por jogar!")
-print('''\nJogo feito por:\nMateus Weiss Medeiros\nDaniel Godri Neto\nGustavo Gomes Luciano''')
+os.system('cls' if os.name == 'nt' else 'clear')
+
+print("""
+╔══════════════════════════════════════════════════════════════╗
+║                     CRÉDITOS DO JOGO                         ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║                  ⚓ Desenvolvedores ⚓                       ║
+║                                                              ║
+║                   Mateus Weiss Medeiros                      ║
+║                     Daniel Godri Neto                        ║
+║                   Gustavo Gomes Luciano                      ║
+║                                                              ║
+║                                                              ║
+║          Obrigado por jogar nossa Batalha Naval!             ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+""")
+ 
+print("🚢 Até a próxima, comandante!")
+print("🌊 Que os ventos estejam sempre a seu favor!")
