@@ -2,6 +2,33 @@ import os
 from random import randint
 from time import sleep
 
+# --- Configurações de Cores ANSI ---
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+RED    = "\033[31m"
+GREEN  = "\033[32m"
+YELLOW = "\033[33m"
+BLUE   = "\033[34m"
+CYAN   = "\033[36m"
+WHITE  = "\033[37m"
+BG_BLUE = "\033[44m"
+
+def exibir_tabuleiro(tabuleiro):
+    """Imprime o tabuleiro formatado com cores."""
+    for linha in tabuleiro:
+        for item in linha:
+            if item == 0:   print(f"{CYAN}🌊{RESET}", end=" ")
+            elif item == '■': print(f"{WHITE}🚢{RESET}", end=" ")
+            elif item == 'X': print(f"{RED}💥{RESET}", end=" ")
+            elif item == 'O': print(f"{YELLOW}💧{RESET}", end=" ")
+            elif str(item) == '10':
+                print(f"{BOLD}{GREEN}{item}{RESET}", end=" ")
+            elif str(item).isdigit() or len(str(item)) == 1:
+                print(f"{BOLD}{GREEN}{item}{RESET}", end="  ")
+            else: print(item, end="  ")
+        print()
+    print()
+
 # Tabuleiros para cada uso
 tabuleiroFeedbackJogador = [
     ['@',1,2,3,4,5,6,7,8,9,10],
@@ -71,43 +98,42 @@ letrasLinhas = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
 
 
 while tamanhoBarco > 0:
-    # Mostra o tabuleiro do jogador para ele ver onde colocar
-    for c in range (11):
-        print (tabuleiroJogador[c])
-
+    print(f"\n{BOLD}{BLUE}=== FASE DE POSICIONAMENTO: JOGADOR ==={RESET}")
+    exibir_tabuleiro(tabuleiroJogador)
+    
     # Coleta e valida a linha do barco
     letraRow = input(f"Digite a linha de onde quer colocar o barco de tamanho {tamanhoBarco}: ").upper()
     if letraRow in letrasLinhas:
         rowBarco = letrasLinhas.index(letraRow) + 1
     else:
-        print("Erro: Linha inválida! Escolha uma letra de A a J.")
+        print(f"{RED}Erro: Linha inválida! Escolha uma letra de A a J.{RESET}")
         continue
 
     # Coleta e valida a coluna do barco
     try:
         columBarco = int(input(f"Digite a coluna de onde quer colocar o barco de tamanho {tamanhoBarco}: "))
         if columBarco < 1 or columBarco > 10:
-            print("Erro: Coluna deve ser entre 1 e 10.")
+            print(f"{RED}Erro: Coluna deve ser entre 1 e 10.{RESET}")
             continue
     except ValueError:
-        print("Erro: Digite apenas números para a coluna!")
+        print(f"{RED}Erro: Digite apenas números para a coluna!{RESET}")
         continue
 
     # Destroier de tamanho 1 não precisa escolher orientação
     if tamanhoBarco > 1:
         orientacaoBarco = input(f"Digite a orientação do barco V ou H: ").upper()
         if orientacaoBarco not in ['V','H']:
-            print ('Erro: Orientação inválida! Use V ou H.')
+            print (f'{RED}Erro: Orientação inválida! Use V ou H.{RESET}')
             continue
     else:
         orientacaoBarco = "H"
 
     # Se passar das bordas da matriz, para
     if orientacaoBarco == 'V' and (rowBarco + tamanhoBarco - 1) > 10:
-        print("Erro: O barco ultrapassa o limite inferior do tabuleiro!")
+        print(f"{RED}Erro: O barco ultrapassa o limite inferior do tabuleiro!{RESET}")
         continue
     elif orientacaoBarco == 'H' and (columBarco + tamanhoBarco - 1) > 10:
-        print("Erro: O barco ultrapassa o limite lateral direito!")
+        print(f"{RED}Erro: O barco ultrapassa o limite lateral direito!{RESET}")
         continue
     
     
@@ -129,7 +155,7 @@ while tamanhoBarco > 0:
 
     # Se a simulação encontrou um barco no caminho, cancela o posicionamento
     if not podePosicionar:
-        print("Erro: Já existe um barco bloqueando esse caminho! Escolha outra posição.")
+        print(f"{RED}Erro: Já existe um barco bloqueando esse caminho! Escolha outra posição.{RESET}")
         continue # Volta para o início do while, pedindo o mesmo barco de novo
     
     # Se passou em tudo (Limites E Sobreposição), desenha o barco
@@ -204,41 +230,41 @@ turnoJogador = True
 
 while vidaJogador > 0 and vidaPC > 0:
     if turnoJogador:
-        # Mostra o tabuleiro com os tiros do jogador no computador
-        for c in range (11):
-            print (tabuleiroFeedbackComputador[c])
-
+        print(f"{BOLD}{BLUE}--- SEU TURNO ---{RESET}")
+        print(f"Vidas Inimigas: {RED}{vidaPC}{RESET}")
+        exibir_tabuleiro(tabuleiroFeedbackComputador)
+        
         # Coleta e valida a linha do tiro
         tiroRow = input(f"Digite a linha de onde quer atirar: ").upper()
         if tiroRow in letrasLinhas:
             rowTiro = letrasLinhas.index(tiroRow) + 1
         else:
-            print("Erro: Linha inválida! Escolha uma letra de A a J.")
+            print(f"{RED}Erro: Linha inválida! Escolha uma letra de A a J.{RESET}")
             continue
 
         # Coleta e valida a coluna do tiro
         try:
             columTiro = int(input(f"Digite a coluna de onde quer atirar: "))
             if columTiro < 1 or columTiro > 10:
-                print("Erro: Coluna deve ser entre 1 e 10.")
+                print(f"{RED}Erro: Coluna deve ser entre 1 e 10.{RESET}")
                 continue
         except ValueError:
-            print("Erro: Digite apenas números para a coluna!")
+            print(f"{RED}Erro: Digite apenas números para a coluna!{RESET}")
             continue
 
         # Checar se o tiro ja foi dado antes no computador
         if tabuleiroFeedbackComputador[rowTiro][columTiro] in ['X', 'O']:
-            print("Erro: Você já atirou nessa coordenada! Escolha outra posição.")
+            print(f"{YELLOW}Aviso: Você já atirou nessa coordenada!{RESET}")
             continue
 
         # Verificar se acertou um barco do computador
         if tabuleiroComputador[rowTiro][columTiro] == '■':
-            print("Você acertou uma embarcação inimiga!")
+            print(f"{BOLD}{GREEN}POOOW! Você acertou uma embarcação inimiga!{RESET}")
             tabuleiroFeedbackComputador[rowTiro][columTiro] = 'X' # Marca acerto no tabuleiro de feedback
             tabuleiroComputador[rowTiro][columTiro] = 'X' # Desativa o barco no tabuleiro do PC
             vidaPC -= 1
         else:
-            print("Água! Você errou o alvo.")
+            print(f"{CYAN}Splash! Água... Você errou o alvo.{RESET}")
             tabuleiroFeedbackComputador[rowTiro][columTiro] = 'O' # Marca agua no tabuleiro de feedback
             turnoJogador = False
 
@@ -246,6 +272,7 @@ while vidaJogador > 0 and vidaPC > 0:
         os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal para a proxima rodada
 
     else:
+        print(f"{BOLD}{YELLOW}--- TURNO DO COMPUTADOR ---{RESET}")
         # Sorteia coordenadas aleatórias para o tiro do computador
         tiroRowPC = randint(1, 10)
         tiroColumPc = randint(1, 10)
@@ -257,13 +284,13 @@ while vidaJogador > 0 and vidaPC > 0:
         # Verificar se o computador acertou o jogador
         if tabuleiroJogador[tiroRowPC][tiroColumPc] == '■': 
             # Traduz o número da linha de volta para letra (ex: 1 vira 'A') para expor no print
-            print(f"O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e ACERTOU um barco seu!")
+            print(f"{RED}KABOOM! O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e ACERTOU seu barco!{RESET}")
             tabuleiroFeedbackJogador[tiroRowPC][tiroColumPc] = 'X' 
             tabuleiroJogador[tiroRowPC][tiroColumPc] = 'X' # CORREÇÃO: adicionado = 'X' para desativar o barco atingido
             vidaJogador -= 1
             # Nota: como ele acertou, turnoJogador continua False (vez do PC de novo)
         else:
-            print(f"O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e deu ÁGUA!")
+            print(f"O Computador atirou em {letrasLinhas[tiroRowPC-1]}{tiroColumPc} e errou na água.")
             tabuleiroFeedbackJogador[tiroRowPC][tiroColumPc] = 'O' 
             turnoJogador = True # CORREÇÃO: Alterna para True para voltar a ser a vez do Humano
 
@@ -273,16 +300,16 @@ while vidaJogador > 0 and vidaPC > 0:
 # Apresenta quem foi o vencedor
 sleep(2.5)
 if vidaPC == 0:
-    print("Parabéns! Você é o vencedor")
+    print(f"\n{BOLD}{GREEN}🏆 PARABÉNS! Você afundou a frota inimiga e venceu a batalha!{RESET}")
 else:
-    print("Que pena! O computador é o vencedor")
+    print(f"\n{BOLD}{RED}💀 DERROTA! Sua frota foi dizimada pelo computador...{RESET}")
 
 # Tela de créditos
 
 sleep(2.5)
 os.system('cls' if os.name == 'nt' else 'clear')
 
-print("""
+print(f"""{CYAN}
 ╔══════════════════════════════════════════════════════════════╗
 ║                     CRÉDITOS DO JOGO                         ║
 ╠══════════════════════════════════════════════════════════════╣
@@ -297,7 +324,7 @@ print("""
 ║          Obrigado por jogar nossa Batalha Naval!             ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
-""")
+{RESET}""")
  
-print("🚢 Até a próxima, comandante!")
-print("🌊 Que os ventos estejam sempre a seu favor!")
+print(f"{BOLD}🚢 Até a próxima, comandante!{RESET}")
+print(f"{CYAN}🌊 Que os ventos estejam sempre a seu favor!{RESET}")
