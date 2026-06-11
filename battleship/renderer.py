@@ -43,11 +43,13 @@ class Renderer:
             "sand": "Areia",
             "grass": "Grama",
             "stone": "Montanha",
-            "hull": "Navio",
+            "hull": "navio",
             "mortar": "Missel 1.0",
             "mortar_heavy": "Missel 2.0",
-            "radar": "Radar",
-            "pirate": "Navio"
+            "radar": "radar",
+            "pirate": "navio",
+            "engine": "motor",
+            "research": "pesquisa"
         }
         filename = mapping.get(name, name)
 
@@ -201,11 +203,9 @@ class Renderer:
         sorted_mods = sorted(ship.modules, key=lambda m: 0 if m.type == 'hull' else 1)
 
         for m in sorted_mods:
-            rx_first, ry_first = m.local_tiles()[0]
-            wx, wy = ox + rx_first, oy + ry_first
-            
-            if (wx, wy) not in visible: continue
-            sx, sy = self.w2s(wx, wy)
+            # Garante que o módulo desenha se qualquer parte dele estiver fora da névoa
+            if not any((ox + rx, oy + ry) in visible for rx, ry in m.local_tiles()): continue
+            sx, sy = self.w2s(ox + m.rx, oy + m.ry)
             if not self._in_vp(sx, sy): continue
 
             # Desenha o sprite do módulo (Hull, Mortar, etc)
@@ -244,10 +244,10 @@ class Renderer:
                         (ex + int(math.cos(rad + 2.5) * 5), ey + int(math.sin(rad + 2.5) * 5)),
                         (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
                     ])
+                if h:
                     bx, by = self.w2s(round(ship.gx), round(ship.gy))
-                    if h:
-                        by += t * h.h + 2
-                        self._draw_hp_bar(bx, by, t * h.w - 4, h.hp / h.max_hp)
+                    by += t * h.h + 2
+                    self._draw_hp_bar(bx, by, t * h.w - 4, ship.hull_hp_ratio())
 
     def draw_ghost(self, ghost, ship: Ship):
         if not ghost: return
@@ -256,17 +256,21 @@ class Renderer:
         for i, (px, py) in enumerate(path):
             scx, scy = self.w2s(px + 1.5, py + 1.0)
             pygame.draw.circle(self.screen, C['ghost_path'], (scx, scy), 3 if i < len(path) - 1 else 5)
+        
         h = ship.hull
-        if h:
-            for rx, ry in h.local_tiles():
+        bw, bh = (h.w, h.h) if h else (3, 2)
+
+        for rx in range(bw):
+            for ry in range(bh):
                 sx, sy = self.w2s(round(nx) + rx, round(ny) + ry)
                 pygame.draw.rect(self.screen, C['ghost_fill'], (sx + 3, sy + 3, t - 6, t - 6))
                 pygame.draw.rect(self.screen, C['ghost'],      (sx + 3, sy + 3, t - 6, t - 6), 1)
-            gsx, gsy = self.w2s(nx + h.w / 2, ny + h.h / 2)
-            grad = math.radians(na)
-            gex  = gsx + int(math.cos(grad) * t * 1.5)
-            gey  = gsy + int(math.sin(grad) * t * 1.5)
-            pygame.draw.line(self.screen, C['ghost'], (gsx, gsy), (gex, gey), 1)
+
+        gsx, gsy = self.w2s(nx + bw / 2, ny + bh / 2)
+        grad = math.radians(na)
+        gex  = gsx + int(math.cos(grad) * t * 1.5)
+        gey  = gsy + int(math.sin(grad) * t * 1.5)
+        pygame.draw.line(self.screen, C['ghost'], (gsx, gsy), (gex, gey), 2)
 
     def draw_mortar_range(self, ship: Ship):
         if not ship.has_mortar(): return
@@ -440,7 +444,7 @@ class Renderer:
             surf.blit(g.font_md.render(lbl, True, c), (12 + i * 250, y0 + 6))
 
             bx, by, bw = 12 + i * 250, y0 + 28, 210
-            self._draw_hp_bar(bx, by, bw, h.hp / h.max_hp if h else 0)
+            self._draw_hp_bar(bx, by, bw, ship.hull_hp_ratio())
             surf.blit(g.font_xs.render(f"${ship.money}", True, C['money']), (bx, y0 + 42))
 
             if i == g.turn and g.phase != 'end':
@@ -491,3 +495,38 @@ class Renderer:
             
         sub = self.g.font_md.render(msg, True, col)
         self.screen.blit(sub, (self.g.SCREEN_W // 2 - sub.get_width() // 2, self.g.SCREEN_H // 2 + 30))
+
+    def draw_instructions_screen(self):
+        """Tela inicial com instruções de jogo e mecânicas."""
+        self.screen.fill((20, 30, 50))
+        g = self.g
+        
+        title = g.font_lg.render("COMO JOGAR - BATALHA NAVAL 2", True, C['highlight'])
+        self.screen.blit(title, (g.SCREEN_W // 2 - title.get_width() // 2, 50))
+
+        instructions = [
+            ("1. FASE DE MOVIMENTO:", "Use as SETAS para ajustar o leme e a velocidade. ENTER confirma."),
+            ("2. FASE DE ATAQUE:", "Use o MOUSE para mirar e CLIQUE para disparar o morteiro."),
+            ("", ""),
+            ("⚓ A MECÂNICA TÁTICA:", "Neste simulador, o movimento e o tiro são RESOLVIDOS SIMULTANEAMENTE."),
+            ("🎯 DICA DE COMANDANTE:", "Não atire onde o inimigo está AGORA."),
+            ("", "Tente prever para onde ele vai navegar e atire na POSIÇÃO FUTURA!"),
+            ("", ""),
+            ("Módulos destruídos podem desativar suas armas ou motores.", ""),
+            ("Fique de olho no RADAR para detectar inimigos silenciosos.", "")
+        ]
+
+        y_offset = 120
+        for header, body in instructions:
+            if header:
+                h_surf = g.font_md.render(header, True, (255, 255, 255))
+                self.screen.blit(h_surf, (g.SCREEN_W // 2 - 300, y_offset))
+            if body:
+                b_surf = g.font_sm.render(body, True, (200, 210, 230))
+                # Se houver header, dá um pequeno indent, senão centraliza
+                x_pos = g.SCREEN_W // 2 - 300 + 20 if header else g.SCREEN_W // 2 - b_surf.get_width() // 2
+                self.screen.blit(b_surf, (x_pos, y_offset + (20 if header else 0)))
+            y_offset += 45
+
+        prompt = g.font_md.render("Pressione qualquer tecla para continuar", True, C['p1'])
+        self.screen.blit(prompt, (g.SCREEN_W // 2 - prompt.get_width() // 2, g.SCREEN_H - 80))

@@ -126,7 +126,13 @@ class Ship:
     def center(self):
         h = self.hull
         if h: return self.gx + h.w / 2, self.gy + h.h / 2
-        return self.gx + 1.5, self.gy + 1.0
+        return self.gx + 0.5, self.gy + 0.5
+
+    def hull_hp_ratio(self):
+        """Retorna a proporção de vida do casco (0.0 a 1.0)."""
+        h = self.hull
+        if not h: return 0
+        return h.hp / h.max_hp
 
     def world_tiles(self):
         ox, oy = round(self.gx), round(self.gy)
@@ -180,7 +186,7 @@ class Ship:
             y += math.sin(rad)
             path.append((x, y))
         h = self.hull
-        bw, bh = (h.w, h.h) if h else (3, 2)
+        bw, bh = (h.w, h.h) if h else (1, 1)
         nx = max(0.0, min(float(grid_w - bw), x))
         ny = max(0.0, min(float(grid_h - bh), y))
         return nx, ny, (self.angle + steering) % 360, path

@@ -29,7 +29,7 @@ class Game:
         self.font_lg = pygame.font.SysFont('consolas', 20, bold=True)
         
         #Estado do jogo: 'menu', 'play', 'end'
-        self.state      = 'menu'
+        self.state      = 'instructions'
         self.map_choice = DEFAULT_MAP
         self.renderer   = Renderer(self)
         # Cria dois navios, um para cada jogador, e os posiciona em cantos opostos do mapa. O método _build_ship() instala os módulos iniciais (motor, morteiro, armadura, pesquisa e radar) em posições fixas no casco.
@@ -127,9 +127,11 @@ class Game:
         """Cria navio já com todos os módulos instalados em posições fixas."""
         s = Ship(gx, gy, angle, pid)
         # Organização do Casco 3x2 (sem sobreposições):
-        s.modules.append(Module('research', rx=0, ry=0)) # Ocupa (0,0) e (1,0)
+        # O casco já é adicionado no __init__ do Ship
+        s.modules.append(Module('research', rx=0, ry=0)) # Ocupa (0,0)
         s.modules.append(Module('mortar',   rx=2, ry=0)) # Ocupa (2,0)
-        s.modules.append(Module('engine',   rx=0, ry=1)) # Ocupa (0,1) e (1,1)
+        s.modules.append(Module('engine',   rx=0, ry=1)) # Ocupa (0,1)
+        s.modules.append(Module('radar',    rx=2, ry=1)) # Ocupa (2,1)
         return s
 
     def _reset_controls(self):
@@ -357,6 +359,11 @@ class Game:
             if e.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
 
+            if self.state == 'instructions':
+                if e.type == pygame.KEYDOWN or e.type == pygame.MOUSEBUTTONDOWN:
+                    self.state = 'menu'
+                return
+
             if self.state == 'menu':
                 if e.type == pygame.MOUSEBUTTONDOWN:
                     for rect, action in self._menu_buttons:
@@ -436,6 +443,10 @@ class Game:
 
     # ─────────────────────── Render ────────────────────────────────────────────
     def draw(self):
+        if self.state == 'instructions':
+            self.renderer.draw_instructions_screen()
+            return
+
         if self.state == 'menu':
             self.renderer.draw_menu()
             return
