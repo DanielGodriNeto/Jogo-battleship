@@ -65,8 +65,8 @@ class Game:
         margin = 6
         protected = set()
         for px, py in [(4, 4), (gs - 8, gs - 8)]:
-            for dx in range(-6, 12):
-                for dy in range(-6, 12):
+            for dx in range(-4, 8):
+                for dy in range(-4, 8):
                     protected.add((px + dx, py + dy))
 
         max_radius  = max(3, min(7, gs // 10))
@@ -135,11 +135,9 @@ class Game:
     def _build_ship(self, gx, gy, angle, pid) -> Ship:
         """Cria navio já com todos os módulos instalados em posições fixas."""
         s = Ship(gx, gy, angle, pid)
-        # Linha 0 do casco: armor (col 1), mortar (col 2)
-        # Linha 1 do casco: engine (cols 0-1), radar (col 2)
+        # Voltou para layout 3x2 (96x64 pixels com tiles de 32px)
         s.modules.append(Module('engine',   rx=0, ry=1))
         s.modules.append(Module('mortar',   rx=2, ry=0))
-        s.modules.append(Module('armor',    rx=1, ry=0))
         s.modules.append(Module('research', rx=0, ry=0))
         s.modules.append(Module('radar',    rx=2, ry=1))
         return s

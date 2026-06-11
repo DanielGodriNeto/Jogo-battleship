@@ -1,9 +1,9 @@
 # constants.py
 
 # --- Dimensões e Interface ---
-BASE_TILE   = 36
-VP_PIXELS_W = 20 * BASE_TILE # 20 colunas de tiles
-VP_PIXELS_H = 16 * BASE_TILE # 16 linhas de tiles
+BASE_TILE   = 32
+VP_PIXELS_W = 20 * BASE_TILE 
+VP_PIXELS_H = 16 * BASE_TILE 
 SIDEBAR_W   = 270
 BOTTOM_H    = 90
 

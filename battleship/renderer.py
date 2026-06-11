@@ -43,11 +43,14 @@ class Renderer:
             "sand": "Areia",
             "grass": "Grama",
             "stone": "Montanha",
-            "hull": "Navio",
+            "hull": "navio",
             "mortar": "Missel 1.0",
             "mortar_heavy": "Missel 2.0",
             "radar": "Radar",
-            "pirate": "Navio"
+            "pirate": "Barcoinimigo",
+            "engine": "motor",
+            "research": "pesquisa",
+            "fish": "peixe"
         }
         filename = mapping.get(name, name)
 
@@ -177,19 +180,22 @@ class Renderer:
     def draw_npcs(self, visible):
         t = self.tile
         for npc in self.g.npcs:
-            wx, wy = int(npc.gx), int(npc.gy)
-            if (wx, wy) not in visible: continue
-            sx, sy = self.w2s(wx, wy)
-            if not self._in_vp(sx, sy): continue
+            # Verifica visibilidade baseada na posição inteira do grid
+            if (int(npc.gx), int(npc.gy)) not in visible: continue
+            
+            # Coordenadas de tela baseadas na posição real (float) para movimento suave
+            sx, sy = self.w2s(npc.gx, npc.gy)
 
             if isinstance(npc, Fish):
                 fish_sprite = self._get_sprite("npcs", "fish")
                 self._draw_rotated_sprite(fish_sprite, (sx + t/2, sy + t/2), npc.angle)
 
             elif isinstance(npc, NPCShip):
-                npc_sprite = self._get_sprite("npcs", "pirate")
-                self.screen.blit(npc_sprite, (sx, sy))
-                self._draw_hp_bar(sx + 3, sy - 7, t - 6, npc.hp / npc.max_hp)
+                # O barco inimigo usa o tamanho 3x2 e deve ser rotacionado
+                npc_sprite = self._get_sprite("npcs", "pirate", (3, 2))
+                # Centraliza o sprite 3x2 no ponto de origem
+                self._draw_rotated_sprite(npc_sprite, (sx + t * 1.5, sy + t), npc.angle)
+                self._draw_hp_bar(sx, sy - 12, t * 3, npc.hp / npc.max_hp)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Navio
