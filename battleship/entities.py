@@ -52,6 +52,8 @@ class Ship:
         self.angle      = float(angle)
         self.pid        = pid
         self.modules    : list[Module] = []
+        self.pending_shot = None # Armazena (tx, ty) para disparar após o movimento
+        self.pending_move = (0.0, 0) # Armazena (steering, speed) planejado
         self.money      = 200
         self._base_fog  = FOG_RADIUS_BASE # Raio base da névoa
         self.modules.append(Module('hull')) # Inicializa com um casco
@@ -65,8 +67,8 @@ class Ship:
 
     @property
     def alive(self):
-        h = self.hull
-        return h is not None and not h.destroyed
+        # O navio está vivo enquanto houver qualquer módulo funcional (incluindo o casco)
+        return any(not m.destroyed for m in self.modules)
 
     @property
     def player_color(self):
@@ -121,9 +123,6 @@ class Ship:
     def has_research(self):
         return self._mod('research') is not None
 
-    def has_armor(self):
-        return self._mod('armor') is not None
-
     def center(self):
         h = self.hull
         if h: return self.gx + h.w / 2, self.gy + h.h / 2
@@ -133,25 +132,44 @@ class Ship:
         ox, oy = round(self.gx), round(self.gy)
         result = []
         for m in self.modules:
-            if not m.destroyed:
-                for (rx, ry) in m.local_tiles():
-                    result.append((ox + rx, oy + ry))
+            # Agora retorna todos os tiles, permitindo colisões mesmo em partes destruídas
+            for (rx, ry) in m.local_tiles():
+                result.append((ox + rx, oy + ry))
         return list(set(result))
 
     def take_damage_at(self, wx, wy, amount=1):
         ox, oy = round(self.gx), round(self.gy)
         
-        # Prioritiza módulos funcionais, deixa o casco por último
-        targets = [m for m in self.modules if not m.destroyed and m.type != 'hull']
-        if self.hull: targets.append(self.hull)
+        # Encontra todos os módulos que ocupam esta coordenada específica
+        potential_targets = []
+        for m in self.modules:
+            if any(ox + lrx == wx and oy + lry == wy for lrx, lry in m.local_tiles()):
+                potential_targets.append(m)
+        
+        if not potential_targets:
+            return False
 
-        for m in targets:
-            if any(ox + rx == wx and oy + ry == wy for rx, ry in m.local_tiles()):
-                m.damage(amount)
-                return True
+        # Prioridade 1: Módulos funcionais que NÃO são o casco (armas, motores, etc.)
+        active_parts = [m for m in potential_targets if not m.destroyed and m.type != 'hull']
+        
+        if active_parts:
+            target = random.choice(active_parts)
+        else:
+            # Prioridade 2: O casco, se ainda estiver inteiro
+            active_hull = [m for m in potential_targets if not m.destroyed and m.type == 'hull']
+            if active_hull:
+                target = active_hull[0]
+            else:
+                # Prioridade 3: Se o local atingido já está destruído, dano de "overflow" em qualquer parte viva
+                living = [m for m in self.modules if not m.destroyed]
+                if not living: return True
+                target = random.choice(living)
+
+        target.damage(amount)
+        return True # Impacto confirmado
         return False
 
-    def preview_move(self, steering, speed, grid_size):
+    def preview_move(self, steering, speed, grid_w, grid_h):
         path = []
         x, y = self.gx, self.gy
         steering = max(-45, min(45, steering))
@@ -163,12 +181,12 @@ class Ship:
             path.append((x, y))
         h = self.hull
         bw, bh = (h.w, h.h) if h else (3, 2)
-        nx = max(0.0, min(float(grid_size - bw), x))
-        ny = max(0.0, min(float(grid_size - bh), y))
+        nx = max(0.0, min(float(grid_w - bw), x))
+        ny = max(0.0, min(float(grid_h - bh), y))
         return nx, ny, (self.angle + steering) % 360, path
 
-    def apply_move(self, steering, speed, grid_size):
-        self.gx, self.gy, self.angle, _ = self.preview_move(steering, speed, grid_size)
+    def apply_move(self, steering, speed, grid_w, grid_h):
+        self.gx, self.gy, self.angle, _ = self.preview_move(steering, speed, grid_w, grid_h)
 
     def available_purchases(self):
         owned = {m.type for m in self.modules}
@@ -254,14 +272,13 @@ class Fish(NPC):
         self.moving   = False
         self._pick_target()
 
-    def _pick_target(self, grid_size=80):
-        # Tenta pegar o tamanho atual se possível, senão usa padrão 80
-        gs = grid_size
+    def _pick_target(self, grid_w=32, grid_h=18):
+        # Tenta pegar o tamanho atual se possível, senão usa padrão Pequeno
         radius = random.randint(2, 5)
         for _ in range(10):
             nx = self.gx + random.randint(-radius, radius)
             ny = self.gy + random.randint(-radius, radius)
-            if 0.5 <= nx <= gs - 1.5 and 0.5 <= ny <= gs - 1.5:
+            if 0.5 <= nx <= grid_w - 1.5 and 0.5 <= ny <= grid_h - 1.5:
                 self.target_x = float(int(nx)) + 0.5
                 self.target_y = float(int(ny)) + 0.5
                 dist = math.hypot(self.target_x - self.gx, self.target_y - self.gy)
@@ -313,14 +330,15 @@ class NPCShip(NPC):
 
     def update(self, map_grid):
         if not self.alive: return
-        GS = len(map_grid)
+        GH = len(map_grid)
+        GW = len(map_grid[0]) if GH > 0 else 0
         self.timer += 1
         if self.timer % 90 == 0:
             self.angle += random.uniform(-45, 45)
         rad = math.radians(self.angle)
         for d in range(1, 5):
             fx, fy = int(self.gx + math.cos(rad) * d), int(self.gy + math.sin(rad) * d)
-            if 0 <= fx < GS and 0 <= fy < GS:
+            if 0 <= fx < GW and 0 <= fy < GH:
                 if map_grid[fy][fx] != 'water':
                     self.angle += random.choice([25, -25, 40, -40])
                     break
@@ -328,8 +346,8 @@ class NPCShip(NPC):
                 self.angle += random.choice([30, -30])
                 break
         rad = math.radians(self.angle)
-        self.gx = max(1.0, min(GS - 2.0, self.gx + math.cos(rad) * self.speed))
-        self.gy = max(1.0, min(GS - 2.0, self.gy + math.sin(rad) * self.speed))
+        self.gx = max(1.0, min(GW - 2.0, self.gx + math.cos(rad) * self.speed))
+        self.gy = max(1.0, min(GH - 2.0, self.gy + math.sin(rad) * self.speed))
 
     def money_reward(self): return 150
 

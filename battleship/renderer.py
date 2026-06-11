@@ -24,8 +24,8 @@ class Renderer:
 
     def w2s(self, gx, gy):       return self.g.w2s(gx, gy)
     def _in_vp(self, sx, sy):    return self.g._in_vp(sx, sy)
-    def _vp_w(self):             return VP_PIXELS_W
-    def _vp_h(self):             return VP_PIXELS_H
+    def _vp_w(self):             return self.g.SCREEN_W
+    def _vp_h(self):             return self.g.SCREEN_H
 
     def _get_sprite(self, category, name, size=None):
         """Carrega, redimensiona e armazena sprites em cache. Se não encontrar, cria um fallback visual."""
@@ -144,13 +144,14 @@ class Renderer:
     def draw_world(self, visible: set):
         g  = self.g
         t  = self.tile
-        gs = g.grid_size
+        gs_w = g.grid_w
+        gs_h = g.grid_h
         self.screen.fill(C['ui_bg'])
 
         col0 = max(0, int(self.cam_x) - 1)
         row0 = max(0, int(self.cam_y) - 1)
-        col1 = min(gs, col0 + int(self._vp_w() / t) + 3)
-        row1 = min(gs, row0 + int(self._vp_h() / t) + 3)
+        col1 = min(gs_w, col0 + int(self._vp_w() / t) + 3)
+        row1 = min(gs_h, row0 + int(self._vp_h() / t) + 3)
 
         for gy in range(row0, row1):
             for gx in range(col0, col1):
@@ -160,8 +161,7 @@ class Renderer:
                 # Desenha sprite do terreno (água, areia, etc)
                 tile_sprite = self._get_sprite("tiles", terrain)
                 self.screen.blit(tile_sprite, (sx, sy))
-
-        self.draw_npcs(visible)
+        # self.draw_npcs(visible) removido
 
     def draw_fog(self, visible):
         t  = self.tile
@@ -230,7 +230,7 @@ class Renderer:
                     pygame.draw.circle(self.screen, col, (sx + 8 + i*(dot_r*2 + 2), sy + 8), dot_r)
 
         h = ship.hull
-        if h and not h.destroyed:
+        if ship.alive:
             cx, cy = ship.center()
             if (int(cx), int(cy)) in visible:
                 scx, scy = self.w2s(cx, cy)
@@ -245,8 +245,9 @@ class Renderer:
                         (ex + int(math.cos(rad - 2.5) * 5), ey + int(math.sin(rad - 2.5) * 5)),
                     ])
                     bx, by = self.w2s(round(ship.gx), round(ship.gy))
-                    by += t * h.h + 2
-                    self._draw_hp_bar(bx, by, t * h.w - 4, h.hp / h.max_hp)
+                    if h:
+                        by += t * h.h + 2
+                        self._draw_hp_bar(bx, by, t * h.w - 4, h.hp / h.max_hp)
 
     def draw_ghost(self, ghost, ship: Ship):
         if not ghost: return
@@ -370,11 +371,6 @@ class Renderer:
         line("Zoom: Z/X ou Scroll", C['text_dim'], indent=6)
         sep()
 
-        mm_w = SIDEBAR_W - 24
-        g.radar.draw(surf, x0, y, mm_w, mm_w / g.grid_size,
-                     g.ships, g.npcs, g.turn, g.grid_size)
-        y += mm_w + 30
-
         sep()
         line("LOG", C['text_dim'])
         for msg in g.messages[-5:]:
@@ -429,11 +425,6 @@ class Renderer:
         g._shop_rects.append((rect_skip, 'skip', ''))
         y += 36
 
-        sep()
-        mm_w = SIDEBAR_W - 24
-        g.radar.draw(surf, x0, y, mm_w, mm_w / g.grid_size,
-                     g.ships, g.npcs, g.turn, g.grid_size)
-
     def draw_bottom(self):
         g    = self.g
         surf = self.screen
@@ -465,3 +456,38 @@ class Renderer:
         }.get(g.phase, "")
         hs = g.font_sm.render(hint, True, C['text_dim'])
         surf.blit(hs, (self._vp_w() // 2 - hs.get_width() // 2, y0 + 62))
+
+    def draw_victory_screen(self):
+        """Exibe uma mensagem de vitória no centro da tela."""
+        self.draw_world(set()) # Desenha o mapa de fundo
+        overlay = pygame.Surface((self.g.SCREEN_W, self.g.SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        winner_color = C['p1'] if self.g.winner == 0 else C['p2']
+        txt = self.g.font_lg.render(f"VITÓRIA DO JOGADOR {self.g.winner + 1}!", True, winner_color)
+        sub = self.g.font_md.render("Pressione R para voltar ao menu", True, (255, 255, 255))
+        
+        self.screen.blit(txt, (self.g.SCREEN_W // 2 - txt.get_width() // 2, self.g.SCREEN_H // 2 - 20))
+        self.screen.blit(sub, (self.g.SCREEN_W // 2 - sub.get_width() // 2, self.g.SCREEN_H // 2 + 20))
+
+    def draw_transition_screen(self):
+        """Desenha a tela preta de transição entre turnos."""
+        self.screen.fill((0, 0, 0))
+        # Define quem é o próximo jogador baseado na fase que acabou
+        msg_p = 2 if (self.g.turn == 0 and self.g.last_phase == 'action') else 1
+        
+        txt = self.g.font_lg.render(f"PASSE O CONTROLE PARA O JOGADOR {msg_p}", True, (255, 255, 255))
+        self.screen.blit(txt, (self.g.SCREEN_W // 2 - txt.get_width() // 2, self.g.SCREEN_H // 2 - 40))
+        
+        elapsed = pygame.time.get_ticks() - self.g.transition_timer
+        if elapsed < 3000:
+            seconds_left = 3 - (elapsed // 1000)
+            msg = f"Aguarde {seconds_left}s..."
+            col = (150, 150, 150)
+        else:
+            msg = "Pressione ENTER para começar"
+            col = (50, 255, 130)
+            
+        sub = self.g.font_md.render(msg, True, col)
+        self.screen.blit(sub, (self.g.SCREEN_W // 2 - sub.get_width() // 2, self.g.SCREEN_H // 2 + 30))

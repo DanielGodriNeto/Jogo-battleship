@@ -15,15 +15,10 @@ ATAQUE (Fase de Ação):
   Clique: Dispara o morteiro
   ESPAÇO: Pula a fase de ataque
 
-LOJA (Fase de Compras):
-  Clique nos botões: Compra ou faz upgrade de módulos
-  ENTER / ESPAÇO: Pula a loja
-
 CONTROLES GERAIS:
   Scroll / Z / X: Zoom no mapa
   R: Volta para o menu (na tela de fim de jogo)
 
-O radar mostra inimigos ruidosos com uma linha verde giratória.
 """
 
 import pygame

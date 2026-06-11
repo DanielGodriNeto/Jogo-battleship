@@ -10,10 +10,10 @@ class Radar:
     """Radar estilo sonar: linha giratória verde, pings coloridos por tipo."""
 
     # Duração dos pings em frames
-    PING_LIFE_NPC    = 200   # NPCShip: amarelo
-    PING_LIFE_FISH   = 160   # Peixe: azul
-    PING_LIFE_ENEMY  = 220   # Jogador inimigo: vermelho
-    PING_LIFE_ISLAND = 300   # Ilha: bege/terra — dura mais, pois não se move
+    PING_LIFE_NPC    = 100   # NPCShip: amarelo
+    PING_LIFE_FISH   = 80    # Peixe: azul
+    PING_LIFE_ENEMY  = 120   # Jogador inimigo: vermelho
+    PING_LIFE_ISLAND = 150   # Ilha: bege/terra — dura mais, pois não se move
 
     def __init__(self):
         self.angle     = 0.0    # graus, avança por frame
@@ -23,15 +23,16 @@ class Radar:
         self._island_pings : dict = {}  # (gx,gy) -> frames_restantes
 
     # ─────────────────────── Update ───────────────────────────────────────────
-    def update(self, ships, npcs, current_turn, map_grid, grid_size):
+    def update(self, ships, npcs, current_turn, map_grid, grid_w, grid_h):
         self.angle = (self.angle + self.speed) % 360
 
         player = ships[current_turn]
         enemy  = ships[1 - current_turn]
         px, py = player.center()
 
-        # Raio de detecção proporcional ao ruído do motor do jogador atual
-        noise_radius = player.noise_level * 20 + 5   # 5–25 tiles
+        # Raio de detecção proporcional ao ruído do motor e escalado pelo tamanho do mapa (base: Médio=48)
+        map_scale = grid_w / 48.0
+        noise_radius = (player.noise_level * 20 + 5) * map_scale
 
         def _sweep_hit(tx, ty):
             """True se a linha de sweep passou por cima deste alvo neste frame."""
@@ -40,7 +41,7 @@ class Radar:
                 return False
             ang = math.degrees(math.atan2(ty - py, tx - px)) % 360
             diff = (ang - self.angle + 360) % 360
-            return diff < self.speed * 2 or diff > 360 - self.speed * 2
+            return diff < self.speed * 1.0 or diff > 360 - self.speed * 1.0
         
         # ── Detecção de Entidades (Jogadores e NPCs) ──────────────────────────
         from entities import NPCShip, Fish
@@ -69,7 +70,7 @@ class Radar:
         for dist_step in range(1, int(noise_radius) + 1, sample_step):
             igx = int(px + math.cos(sweep_rad) * dist_step)
             igy = int(py + math.sin(sweep_rad) * dist_step)
-            if 0 <= igx < grid_size and 0 <= igy < grid_size:
+            if 0 <= igx < grid_w and 0 <= igy < grid_h:
                 if map_grid[igy][igx] != 'water':
                     key = (igx, igy)
                     if key not in self._island_pings or self._island_pings[key] <= 0:
@@ -92,7 +93,7 @@ class Radar:
         self.pings = [p for p in self.pings if p['life'] > 0]
 
     # ─────────────────────── Draw ─────────────────────────────────────────────
-    def draw(self, surf, x0, y, mm_w, mm_sc, ships, npcs, current_turn, grid_size):
+    def draw(self, surf, x0, y, mm_w, mm_sc, ships, npcs, current_turn, grid_w, grid_h):
         cx = x0 + 12 + mm_w // 2
         cy = y  + mm_w // 2
         r  = mm_w // 2
@@ -141,7 +142,8 @@ class Radar:
         }
 
         player_cx, player_cy = ships[current_turn].center()
-        noise_r = ships[current_turn].noise_level * 20 + 5
+        map_scale = grid_w / 48.0
+        noise_r = (ships[current_turn].noise_level * 20 + 5) * map_scale
 
         for ping in self.pings:
             life_ratio = ping['life'] / ping['max_life']
@@ -174,39 +176,3 @@ class Radar:
 
         # Borda
         pygame.draw.circle(surf, C['ui_border'], (cx, cy), r, 1)
-
-        # ── Legenda de coordenadas ─────────────────────────────────────────────
-        y_ll  = y + mm_w + 4
-        font  = pygame.font.SysFont('consolas', 11)
-        for i, s in enumerate(ships):
-            sx_, sy_ = s.center()
-            lat =  90.0 - (sy_ / grid_size) * 180.0
-            lon = -180.0 + (sx_ / grid_size) * 360.0
-            la  = f"{'N' if lat >= 0 else 'S'}{abs(lat):05.1f}°"
-            lo  = f"{'E' if lon >= 0 else 'W'}{abs(lon):06.1f}°"
-
-            if i == current_turn:
-                txt = font.render(f"J{i+1} {la} {lo}", True, s.player_color)
-            elif s.is_silent:
-                txt = font.render(f"J{i+1} — SILENCIOSO —", True, C['text_dim'])
-            else:
-                lat += random.uniform(-8, 8)
-                lon += random.uniform(-8, 8)
-                la2 = f"{'N' if lat >= 0 else 'S'}{abs(lat):05.1f}°"
-                lo2 = f"{'E' if lon >= 0 else 'W'}{abs(lon):06.1f}°"
-                txt = font.render(f"J{i+1} ~{la2} ~{lo2}", True, C['text_dim'])
-            surf.blit(txt, (x0 + 10, y_ll))
-            y_ll += 14
-
-        # ── Legenda de cores ───────────────────────────────────────────────────
-        y_ll += 2
-        legend = [
-            ((220,  55,  55), "● Inimigo"),
-            ((210, 180,  40), "● NPC"),
-            ((60,  160, 230), "● Peixe"),
-            ((180, 155, 100), "■ Ilha"),
-        ]
-        for col, label in legend:
-            ls = font.render(label, True, col)
-            surf.blit(ls, (x0 + 10, y_ll))
-            y_ll += 13
