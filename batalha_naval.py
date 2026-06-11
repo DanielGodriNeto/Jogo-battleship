@@ -1,6 +1,19 @@
 import os
 from random import randint
 from time import sleep
+import pyfiglet
+import subprocess
+import sys
+
+try:
+    import pyfiglet
+except ImportError:
+    try:
+        # Tenta instalar automaticamente caso não exista
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyfiglet"])
+        import pyfiglet
+    except:
+        pyfiglet = None
 
 # --- Configurações de Cores ANSI ---
 RESET  = "\033[0m"
@@ -96,8 +109,47 @@ tamanhoBarcoPC = 5
 # Letras numa lista para conmseguir o número da coordenada
 letrasLinhas = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
 
+# --- Tela Inicial ---
+os.system('cls' if os.name == 'nt' else 'clear')
+if pyfiglet:
+    print(pyfiglet.figlet_format("Batalha Naval", font="standard"))
+else:
+    print(f"\n{BOLD}{CYAN}=== BATALHA NAVAL ==={RESET}\n")
+
+print(f"""{CYAN}
+╔══════════════════════════════════════════════════════════════╗
+║                     CRÉDITOS DO JOGO                         ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║                  ⚓ Desenvolvedores ⚓                       ║
+║                                                              ║
+║                   Mateus Weiss Medeiros                      ║
+║                     Daniel Godri Neto                        ║
+║                   Gustavo Gomes Luciano                      ║
+║                                                              ║
+║                                                              ║
+║          Obrigado por jogar nossa Batalha Naval!             ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+{RESET}""")
+
+print(f"\n{BOLD}{GREEN}Pressione ENTER para começar...{RESET}")
+input() # Espera o usuário pressionar Enter
+
+# Remove a tela de créditos do final do jogo, pois agora está na inicial
+
+# --- Fim da Tela Inicial ---
+
+
+
+
 
 while tamanhoBarco > 0:
+    os.system('cls' if os.name == 'nt' else 'clear')
+    if pyfiglet:
+        print(pyfiglet.figlet_format("Batalha Naval", font="standard"))
+    else:
+        print(f"\n{BOLD}{CYAN}=== BATALHA NAVAL ==={RESET}\n")
     print(f"\n{BOLD}{BLUE}=== FASE DE POSICIONAMENTO: JOGADOR ==={RESET}")
     exibir_tabuleiro(tabuleiroJogador)
     
@@ -169,7 +221,6 @@ while tamanhoBarco > 0:
             checaCol += 1
 
     tamanhoBarco -= 1
-    os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal
 
 while tamanhoBarcoPC > 0:
 
@@ -230,9 +281,14 @@ turnoJogador = True
 
 while vidaJogador > 0 and vidaPC > 0:
     if turnoJogador:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        if pyfiglet:
+            print(pyfiglet.figlet_format("Batalha Naval", font="standard"))
+        else:
+            print(f"\n{BOLD}{CYAN}=== BATALHA NAVAL ==={RESET}\n")
         print(f"{BOLD}{BLUE}--- SEU TURNO ---{RESET}")
         print(f"Vidas Inimigas: {RED}{vidaPC}{RESET}")
-        exibir_tabuleiro(tabuleiroFeedbackComputador)
+        exibir_tabuleiro(tabuleiroFeedbackComputador) # Exibe o tabuleiro antes de pedir o tiro
         
         # Coleta e valida a linha do tiro
         tiroRow = input(f"Digite a linha de onde quer atirar: ").upper()
@@ -270,8 +326,12 @@ while vidaJogador > 0 and vidaPC > 0:
 
         sleep(2.5) # Tempo para jogador ver se acertou ou não
         os.system('cls' if os.name == 'nt' else 'clear') # Limpa o terminal para a proxima rodada
-
     else:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        if pyfiglet:
+            print(pyfiglet.figlet_format("Batalha Naval", font="standard"))
+        else:
+            print(f"\n{BOLD}{CYAN}=== BATALHA NAVAL ==={RESET}\n")
         print(f"{BOLD}{YELLOW}--- TURNO DO COMPUTADOR ---{RESET}")
         # Sorteia coordenadas aleatórias para o tiro do computador
         tiroRowPC = randint(1, 10)
@@ -296,35 +356,7 @@ while vidaJogador > 0 and vidaPC > 0:
 
         sleep(2.5) # Dá tempo para o jogador ler o que o PC fez antes de limpar a tela
         os.system('cls' if os.name == 'nt' else 'clear')
-
 # Apresenta quem foi o vencedor
 sleep(2.5)
-if vidaPC == 0:
-    print(f"\n{BOLD}{GREEN}🏆 PARABÉNS! Você afundou a frota inimiga e venceu a batalha!{RESET}")
-else:
-    print(f"\n{BOLD}{RED}💀 DERROTA! Sua frota foi dizimada pelo computador...{RESET}")
-
-# Tela de créditos
-
-sleep(2.5)
 os.system('cls' if os.name == 'nt' else 'clear')
-
-print(f"""{CYAN}
-╔══════════════════════════════════════════════════════════════╗
-║                     CRÉDITOS DO JOGO                         ║
-╠══════════════════════════════════════════════════════════════╣
-║                                                              ║
-║                  ⚓ Desenvolvedores ⚓                       ║
-║                                                              ║
-║                   Mateus Weiss Medeiros                      ║
-║                     Daniel Godri Neto                        ║
-║                   Gustavo Gomes Luciano                      ║
-║                                                              ║
-║                                                              ║
-║          Obrigado por jogar nossa Batalha Naval!             ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-{RESET}""")
- 
-print(f"{BOLD}🚢 Até a próxima, comandante!{RESET}")
-print(f"{CYAN}🌊 Que os ventos estejam sempre a seu favor!{RESET}")
+print(f"\n{BOLD}{GREEN}🏆 PARABÉNS! Você afundou a frota inimiga e venceu a batalha!{RESET}" if vidaPC == 0 else f"\n{BOLD}{RED}💀 DERROTA! Sua frota foi dizimada pelo computador...{RESET}")
